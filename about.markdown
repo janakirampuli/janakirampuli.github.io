@@ -1,18 +1,9 @@
 ---
-layout: page
+layout: default
 title: About
-permalink: /about/
+permalink: /about
 ---
 
-This is the base Jekyll theme. You can find out more info about customizing your Jekyll theme, as well as basic Jekyll usage documentation at [jekyllrb.com](https://jekyllrb.com/)
+Hey, I'm Janaki Ram — a Software Developer at Oracle, where I work with the Transaction Manager for Microservices ([MicroTx](https://www.oracle.com/database/transaction-manager-for-microservices/)) team. I'm passionate about AI, distributed systems, system design. I studied Computer Science at IIT Bombay, and I'm always up for good conversations around tech (or anything else, really). 
 
-You can find the source code for Minima at GitHub:
-[jekyll][jekyll-organization] /
-[minima](https://github.com/jekyll/minima)
-
-You can find the source code for Jekyll at GitHub:
-[jekyll][jekyll-organization] /
-[jekyll](https://github.com/jekyll/jekyll)
-
-
-[jekyll-organization]: https://github.com/jekyll
+If you'd like to chat, feel free to reach out to me via [LinkedIn](https://www.linkedin.com/in/janaki-ram-puli/) or at [janakirampuli[at]gmail.com](mailto:janakirampuli@gmail.com)

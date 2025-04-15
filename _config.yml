@@ -18,21 +18,46 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: Janaki's Blog
+title: Janaki Ram Puli
 email: janakirampuli@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
-  Write an awesome description for your new site here. You can edit this
-  line in _config.yml. It will appear in your document head meta (for
-  Google search results) and in your feed.xml site description.
+  A blog about my journey in the world of technology, life, and
+  everything in between.<br>
+  MTS-1 at Oracle, CSE undergrad at IIT Bombay
+author: Janaki Ram Puli
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: foo_7755
 github_username:  janakirampuli
 
+show_downloads: false
+
+repository: janakirampuli/janakirampuli.github.io
+
 # Build settings
-theme: minima
+# remote_theme: pages-themes/hacker@v0.2.0
+# plugins:
+# - jekyll-remote-theme # add this line to the plugins list if you already have one
+theme: jekyll-theme-hacker
 plugins:
   - jekyll-feed
+  - jekyll-seo-tag
+  - jekyll-sitemap
+  - jekyll-remote-theme # add this line to the plugins list if you already have one
+  - jekyll-paginate-v2
+  - jemoji
+  - jekyll-gist
+  - jekyll-assets
+  - jekyll-archives
+
+permalink: /blog/:title.html
+
+incremental: true
+
+collections:
+  notes:
+    output: true
+    permalink: /notes/:title.html
 
 # Exclude from processing.
 # The following items will not be processed, by default.

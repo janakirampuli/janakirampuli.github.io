@@ -1,0 +1,34 @@
+---
+layout: default
+---
+
+{%- if site.notes.size > 0 -%}
+  {%- if page.list_title -%}
+    <h2 class="post-list-heading">{{ page.list_title }}</h2>
+  {%- endif -%}
+
+  {%- assign sorted_notes = site.notes | sort: "date" | reverse -%}
+  <ul class="post-list">
+    {%- assign current_year = "" -%}
+    {%- assign date_format = site.minima.date_format | default: "%b %-d, %Y" -%}
+
+    {%- for note in sorted_notes -%}
+      {%- assign note_year = note.date | date: "%Y" -%}
+      {%- if note_year != current_year -%}
+        {%- assign current_year = note_year -%}
+        </ul><h2>{{ current_year }}</h2><ul class="post-list">
+      {%- endif -%}
+      <li>
+        <span class="post-meta">{{ note.date | date: date_format }}</span>
+        <h3>
+          <a class="post-link" href="{{ note.url | relative_url }}">
+            {{ note.title | escape }}
+          </a>
+        </h3>
+        {%- if site.minima.show_excerpts -%}
+          {{ note.excerpt }}
+        {%- endif -%}
+      </li>
+    {%- endfor -%}
+  </ul>
+{%- endif -%}
