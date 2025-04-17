@@ -67,3 +67,27 @@ body {
   input:checked + .slider:before {
     transform: translateX(30px);
   }
+
+  .img-center {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    width: 50%;
+    /* border: 2px solid #ddd; */
+    /* background-color: #fff; */
+    /* padding: 4px; */
+    /* border-radius: 6px; */
+    /* box-shadow: 0 2px 8px rgba(0,0,0,0.1); */
+  }
+  
+  .poem {
+    /* font-family: 'Georgia', serif; */
+    font-size: 1.1rem;
+    white-space: pre-wrap;
+    background-color: #f0f0f0;
+    padding: 1rem;
+    border-left: 5px solid #007acc;
+    margin: 1.5rem 0;
+    color: #222;
+  }
+  
