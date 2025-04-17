@@ -5,7 +5,20 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
-    {% include head-custom.html %}
+
+    <link rel="stylesheet" href="{{ '/assets/css/main.css' | relative_url }}">
+    <link rel="stylesheet" href="{{ '/assets/css/dark.css' | relative_url }}" id="dark-theme" disabled>
+    <script>
+      // Apply user preference or system setting on page load
+      (function() {
+        const theme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (theme === 'dark' || (!theme && prefersDark)) {
+          document.documentElement.classList.add('dark-mode');
+          document.getElementById('dark-theme').removeAttribute('disabled');
+        }
+      })();
+    </script>
 
 {% seo %}
   </head>
@@ -26,6 +39,17 @@
                 <a href="{{ page.url}}">{{ page.title | escape}}</a>&nbsp;
             {%- endfor -%}
         </section>
+
+        <div class="theme-toggle-wrapper">
+          <label class="switch">
+            <input type="checkbox" id="theme-toggle">
+            <span class="slider round">
+              <span class="icon">☀️</span>
+              <span class="icon">🌙</span>
+            </span>
+          </label>
+        </div>
+        
         
         <h2>{{ site.description | default: site.github.project_tagline }}</h2>
 
@@ -37,5 +61,37 @@
         {{ content }}
       </section>
     </div>
+    <script>
+      const toggleCheckbox = document.getElementById('theme-toggle');
+      const darkTheme = document.getElementById('dark-theme');
+    
+      function applyTheme(theme) {
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark-mode');
+          darkTheme.removeAttribute('disabled');
+          toggleCheckbox.checked = true;
+        } else {
+          document.documentElement.classList.remove('dark-mode');
+          darkTheme.setAttribute('disabled', 'true');
+          toggleCheckbox.checked = false;
+        }
+      }
+    
+      // Load saved theme or use system preference
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+      if (savedTheme) {
+        applyTheme(savedTheme);
+      } else if (prefersDark) {
+        applyTheme('dark');
+      }
+    
+      toggleCheckbox.addEventListener('change', () => {
+        const newTheme = toggleCheckbox.checked ? 'dark' : 'light';
+        applyTheme(newTheme);
+        localStorage.setItem('theme', newTheme);
+      });
+    </script>
   </body>
 </html>
