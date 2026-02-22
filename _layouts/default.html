@@ -4,10 +4,15 @@
     <meta charset='utf-8'>
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Favicon(s) to avoid 404s for /favicon.ico during local/dev and in production -->
+    <link rel="icon" href="{{ '/assets/favicon.ico' | relative_url }}" sizes="any">
+    <link rel="icon" type="image/png" href="{{ '/assets/favicon-32.png' | relative_url }}" sizes="32x32">
+    <link rel="icon" type="image/png" href="{{ '/assets/favicon-16.png' | relative_url }}" sizes="16x16">
+    <link rel="apple-touch-icon" href="{{ '/assets/favicon.png' | relative_url }}">
     <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
 
-    <link rel="stylesheet" href="{{ '/assets/css/main.css' | relative_url }}">
-    <link rel="stylesheet" href="{{ '/assets/css/dark.css' | relative_url }}" id="dark-theme" disabled>
+    <link rel="stylesheet" href="{{ '/assets/css/main.css?v=' | append: site.github.build_revision | relative_url }}">
+    <link rel="stylesheet" href="{{ '/assets/css/dark.css?v=' | append: site.github.build_revision | relative_url }}" id="dark-theme" disabled>
     <script>
       // Apply user preference or system setting on page load
       (function() {
@@ -20,7 +25,8 @@
       })();
     </script>
 
-{% seo %}
+    <title>{{ site.title | default: site.github.repository_name }}</title>
+    {% seo title=false %}
   </head>
 
   <body>
@@ -33,10 +39,12 @@
 
         <section id="pages">
           <!-- Add Home page url "/" -->
-          <a href="{{ '/' | relative_url }}">Home</a>&nbsp;
+          <a href="{{ '/' | relative_url }}">Home</a>
           <!-- Add all other pages -->
             {%- for page in site.pages -%}
-                <a href="{{ page.url}}">{{ page.title | escape}}</a>&nbsp;
+              {%- if page.title and page.title != "" and page.url and page.url != "/" -%}
+                <a href="{{ page.url | relative_url }}">{{ page.title | escape }}</a>
+              {%- endif -%}
             {%- endfor -%}
         </section>
 

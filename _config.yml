@@ -22,7 +22,7 @@ title: Janaki Ram Puli
 email: janakirampuli@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   Personal website <br>
-  MTS-1 at Oracle, CSE undergrad at IIT Bombay
+  IC-2 at Oracle, CSE undergrad at IIT Bombay
 author: Janaki Ram Puli
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
@@ -51,7 +51,9 @@ plugins:
 
 permalink: /blog/:title.html
 
-incremental: true
+# Incremental builds can miss newly added/updated posts in some setups.
+# Keeping this off makes local builds and GitHub Pages builds more reliable.
+incremental: false
 
 collections:
   notes:

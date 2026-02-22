@@ -4,5 +4,5 @@
 
 layout: notes-index
 title: Notes
-permalink: /notes
+permalink: /notes/
 ---

@@ -2,12 +2,14 @@
 layout: default
 ---
 
-{%- if site.notes.size > 0 -%}
+{%- assign visible_notes = site.notes | where_exp: "note", "note.published != false" -%}
+
+{%- if visible_notes.size > 0 -%}
   {%- if page.list_title -%}
     <h2 class="post-list-heading">{{ page.list_title }}</h2>
   {%- endif -%}
 
-  {%- assign sorted_notes = site.notes | sort: "date" | reverse -%}
+  {%- assign sorted_notes = visible_notes | sort: "date" | reverse -%}
   <ul class="post-list">
     {%- assign current_year = "" -%}
     {%- assign date_format = site.minima.date_format | default: "%b %-d, %Y" -%}

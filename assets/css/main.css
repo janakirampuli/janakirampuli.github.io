@@ -1,12 +1,150 @@
+/* Prevent accidental horizontal overflow/scroll */
+html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+img, svg, video, canvas {
+    max-width: 100%;
+    height: auto;
+}
+
 body {
     background: #ffffff;
     color: #000000;
+  }
+
+  /* Light mode accent override: the Hacker theme uses neon green (#b5e853)
+     for headings which has low contrast on a white background. */
+  html:not(.dark-mode) {
+    --accent-color: #007acc;
+  }
+
+  html:not(.dark-mode) header h1,
+  html:not(.dark-mode) h1,
+  html:not(.dark-mode) h2,
+  html:not(.dark-mode) h3,
+  html:not(.dark-mode) h4,
+  html:not(.dark-mode) h5,
+  html:not(.dark-mode) h6 {
+    color: var(--accent-color) !important;
+  }
+
+  html:not(.dark-mode) hr {
+    border-bottom-color: var(--accent-color) !important;
+    color: var(--accent-color) !important;
+  }
+
+  html:not(.dark-mode) header {
+    /* theme has dashed green border in light mode; override */
+    border-bottom-color: var(--accent-color) !important;
+  }
+
+  html:not(.dark-mode) th {
+    border-bottom-color: var(--accent-color) !important;
+  }
+
+  html:not(.dark-mode) a,
+  html:not(.dark-mode) a:visited,
+  html:not(.dark-mode) a:hover,
+  html:not(.dark-mode) a:focus {
+    color: var(--accent-color);
+  }
+
+  /* Light mode: the base Hacker theme renders unordered list bullets as a
+     neon-green image (bullet.png) that looks like ">>".
+     Override it to use our light-mode accent color instead. */
+  html:not(.dark-mode) #main_content ul li {
+    list-style-image: none;
+  }
+
+  html:not(.dark-mode) #main_content ul {
+    list-style: none;
+    padding-left: 1.4em;
+  }
+
+  html:not(.dark-mode) #main_content ul li {
+    position: relative;
+  }
+
+  html:not(.dark-mode) #main_content ul li::before {
+    content: ">>";
+    position: absolute;
+    left: -1.4em;
+    color: var(--accent-color);
+    font-weight: bold;
+  }
+
+  /* Code blocks: in the hacker theme `pre` text is neon green on a black bg.
+     In light mode we want a light background and normal readable text. */
+  html:not(.dark-mode) pre {
+    background: #f6f8fa !important;
+    color: #24292f !important;
+    border: 1px solid #d0d7de !important;
+  }
+
+  /* Rouge/Jekyll often wraps code blocks as `.highlight > pre` */
+  html:not(.dark-mode) .highlight,
+  html:not(.dark-mode) pre.highlight,
+  html:not(.dark-mode) .highlight pre {
+    background: #f6f8fa !important;
+    color: #24292f !important;
+    border: 1px solid #d0d7de !important;
+  }
+
+  html:not(.dark-mode) pre code {
+    color: inherit !important;
+    background: transparent !important;
+  }
+
+  html:not(.dark-mode) code.highlighter-rouge {
+    background: #f6f8fa !important;
+    border: 1px solid #d0d7de !important;
+    color: #24292f !important;
+  }
+
+  /* Light mode: remove Hacker theme glow/text-shadow (looks blurry on white) */
+  a,
+  a:visited,
+  a:hover,
+  a:focus,
+  h1, h2, h3, h4, h5, h6 {
+    text-shadow: none !important;
   }
   
   header {
     display: flex;
     justify-content: space-between;
     padding: 1rem;
+  }
+
+  /* Header nav: ensure equal spacing between links (avoid &nbsp; hacks) */
+  #pages {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.9rem;
+    margin-top: 0.4rem;
+  }
+
+  #pages a {
+    display: inline-block;
+  }
+
+  /* The base hacker theme uses a negative left margin on the header title.
+     On some screens this can create page-level horizontal scrolling. */
+  header h1 {
+    margin-left: 0;
+  }
+
+  /* Hacker theme adds "./ " before the site title via a pseudo-element.
+     Remove it so the header shows only the site title text. */
+  header h1::before {
+    content: none !important;
   }
 
   .theme-toggle-wrapper {
