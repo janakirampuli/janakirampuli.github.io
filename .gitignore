@@ -4,5 +4,10 @@ _site
 .jekyll-metadata
 vendor
 .DS_Store
+.jekyll-cache/
+.sass-cache/
+.bundle/
+vendor/
+firebase.txt
 
 Gemfile.lock
