@@ -1,0 +1,40 @@
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyDBoM83GJcImR5poDXfB6C5i9di7zKz4OE",
+    authDomain: "sudoku-5962e.firebaseapp.com",
+    projectId: "sudoku-5962e",
+    storageBucket: "sudoku-5962e.firebasestorage.app",
+    messagingSenderId: "14338708223",
+    appId: "1:14338708223:web:8417ab3e47ff40139172ca"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script>
+
+
+npm install firebase
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDBoM83GJcImR5poDXfB6C5i9di7zKz4OE",
+  authDomain: "sudoku-5962e.firebaseapp.com",
+  projectId: "sudoku-5962e",
+  storageBucket: "sudoku-5962e.firebasestorage.app",
+  messagingSenderId: "14338708223",
+  appId: "1:14338708223:web:8417ab3e47ff40139172ca"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);

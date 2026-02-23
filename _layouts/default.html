@@ -15,6 +15,12 @@
 
     <link rel="stylesheet" href="{{ '/assets/css/main.css?v=' | append: site.github.build_revision | relative_url }}">
     <link rel="stylesheet" href="{{ '/assets/css/dark.css?v=' | append: site.github.build_revision | relative_url }}" id="dark-theme" disabled>
+
+    {%- if page.extra_css -%}
+      {%- for css in page.extra_css -%}
+        <link rel="stylesheet" href="{{ css | relative_url }}">
+      {%- endfor -%}
+    {%- endif -%}
     <script>
       // Apply user preference or system setting on page load
       (function() {

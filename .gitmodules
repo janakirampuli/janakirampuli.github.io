@@ -1,0 +1,3 @@
+[submodule "projects/sudoku"]
+	path = projects/sudoku
+	url = git@github.com:janakirampuli/sudoku.git
