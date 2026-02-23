@@ -21,13 +21,26 @@
 title: Janaki Ram Puli
 email: janakirampuli@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
-  Personal website <br>
-  IC-2 at Oracle, CSE undergrad at IIT Bombay
 author: Janaki Ram Puli
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 twitter_username: foo_7755
 github_username:  janakirampuli
+
+# Explicit header navigation (avoid auto-listing every page)
+nav:
+  - title: Home
+    url: /
+  - title: About
+    url: /about/
+  - title: Contact
+    url: /contact/
+  - title: Notes
+    url: /notes/
+  - title: Projects
+    url: /projects/
+  - title: Resume
+    url: /resume/
 
 show_downloads: false
 

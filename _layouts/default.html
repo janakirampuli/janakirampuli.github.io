@@ -47,13 +47,18 @@
 
         <section id="pages">
           <!-- Add Home page url "/" -->
-          <a href="{{ '/' | relative_url }}">Home</a>
-          <!-- Add all other pages -->
+          {%- if site.nav -%}
+            {%- for item in site.nav -%}
+              <a href="{{ item.url | relative_url }}">{{ item.title | escape }}</a>
+            {%- endfor -%}
+          {%- else -%}
+            <a href="{{ '/' | relative_url }}">Home</a>
             {%- for page in site.pages -%}
               {%- if page.title and page.title != "" and page.url and page.url != "/" -%}
                 <a href="{{ page.url | relative_url }}">{{ page.title | escape }}</a>
               {%- endif -%}
             {%- endfor -%}
+          {%- endif -%}
         </section>
 
         <div class="theme-toggle-wrapper">
