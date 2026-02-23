@@ -6,15 +6,15 @@ permalink: /contact/
 
 <h1>Contact</h1>
 
-<p>Feel free to reach out to me via any of the platforms below:</p>
+<p>Feel free to reach out to me:</p>
 
 <ul>
   <li>
-    📧 <strong>Email:</strong>
+   <strong>Email:</strong>
     <a href="mailto:janakirampuli@gmail.com">janakirampuli@gmail.com</a>
   </li>
   <li>
-    💼 <strong>LinkedIn:</strong>
+    <strong>LinkedIn:</strong>
     <a href="https://www.linkedin.com/in/janaki-ram-puli/" target="_blank" rel="noopener noreferrer">
       linkedin.com/in/janaki-ram-puli
     </a>
