@@ -1,0 +1,7 @@
+{%- assign label = include.label -%}
+{%- assign text = include.text | default: include.content -%}
+
+<span class="ia-tooltip" tabindex="0">
+  {{ label }}
+  <span class="ia-tooltip__bubble">{{ text | markdownify | strip | replace: '<p>', '' | replace: '</p>', '' }}</span>
+</span>

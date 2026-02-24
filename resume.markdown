@@ -126,14 +126,14 @@ permalink: /resume/
 
 ## Scholastic Achievements
 
-- AIR 199 — JEE Advanced
-- AIR 497 — JEE Main
-- AIR 40 — JEE Main B.Planning
-- State Rank 18 — AP EAMCET
-- State Rank 35 — TS EAMCET
-- Top 450 — Indian National Physics Olympiad (INPhO)
-- Top 330 — Indian National Astronomy Olympiad (INAO)
-- Top 800 — Indian National Chemistry Olympiad (INChO)
+- AIR 199 -- JEE Advanced
+- AIR 497 -- JEE Main
+- AIR 40 -- JEE Main B.Planning
+- State Rank 18 -- AP EAMCET
+- State Rank 35 -- TS EAMCET
+- Top 450 -- Indian National Physics Olympiad (INPhO)
+- Top 330 -- Indian National Astronomy Olympiad (INAO)
+- Top 800 -- Indian National Chemistry Olympiad (INChO)
 
 ---
 

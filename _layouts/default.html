@@ -16,6 +16,9 @@
     <link rel="stylesheet" href="{{ '/assets/css/main.css?v=' | append: site.github.build_revision | relative_url }}">
     <link rel="stylesheet" href="{{ '/assets/css/dark.css?v=' | append: site.github.build_revision | relative_url }}" id="dark-theme" disabled>
 
+    <!-- Interactive article toolkit (local, GitHub Pages friendly) -->
+    <link rel="stylesheet" href="{{ '/assets/css/interactive.css?v=' | append: site.github.build_revision | relative_url }}">
+
     {%- if page.extra_css -%}
       {%- for css in page.extra_css -%}
         <link rel="stylesheet" href="{{ css | relative_url }}">
@@ -82,6 +85,9 @@
         {{ content }}
       </section>
     </div>
+
+    <!-- Interactive widgets / progressive enhancements -->
+    <script type="module" src="{{ '/assets/js/interactive.js?v=' | append: site.github.build_revision | relative_url }}"></script>
     <script>
       const toggleCheckbox = document.getElementById('theme-toggle');
       const darkTheme = document.getElementById('dark-theme');

@@ -1,0 +1,48 @@
+{%- comment -%}
+Usage:
+
+{% capture tab1 %}
+```cpp
+// code
+```
+{% endcapture %}
+
+{% capture tab2 %}
+```python
+# code
+```
+{% endcapture %}
+
+{% include components/tabs.html
+   id="demo-tabs"
+   tabs="C++|Python"
+   contents=tab1|tab2
+%}
+
+Note: Liquid doesn't support arrays nicely without plugins, so for the sample
+post we'll use the "panels" include instead (below) OR inline HTML.
+{%- endcomment -%}
+
+{%- assign id = include.id | default: "tabs" -%}
+{%- assign tab_labels = include.tabs | split: "|" -%}
+{%- assign panel_ids = include.panel_ids | split: "|" -%}
+
+<div class="ia-tabs" id="{{ id }}">
+  <div class="ia-tabs__tablist" role="tablist" aria-label="{{ include.aria_label | default: 'Tabs' }}">
+    {%- for label in tab_labels -%}
+      {%- assign idx = forloop.index0 -%}
+      {%- assign tab_id = id | append: '-tab-' | append: idx -%}
+      {%- assign panel_id = id | append: '-panel-' | append: idx -%}
+      <button
+        class="ia-tabs__tab"
+        role="tab"
+        id="{{ tab_id }}"
+        aria-controls="{{ panel_id }}"
+        aria-selected="{% if idx == 0 %}true{% else %}false{% endif %}"
+        type="button"
+      >{{ label }}</button>
+    {%- endfor -%}
+  </div>
+
+  {{ include.content }}
+</div>

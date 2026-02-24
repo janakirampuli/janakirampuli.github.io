@@ -1,0 +1,18 @@
+{%- assign src = include.src -%}
+{%- assign alt = include.alt | default: "" -%}
+{%- assign caption = include.caption | default: nil -%}
+{%- assign width = include.width -%}
+{%- assign zoom = include.zoom | default: true -%}
+
+<figure class="ia-figure">
+  <img
+    src="{{ src | relative_url }}"
+    alt="{{ alt | escape }}"
+    {% if width %}width="{{ width }}"{% endif %}
+    class="{% if zoom %}ia-zoomable{% endif %}"
+    loading="lazy"
+  />
+  {%- if caption -%}
+    <figcaption>{{ caption | markdownify | strip | replace: '<p>', '' | replace: '</p>', '' }}</figcaption>
+  {%- endif -%}
+</figure>

@@ -1,0 +1,12 @@
+{%- assign type = include.type | default: "info" -%}
+{%- assign title = include.title | default: type | capitalize -%}
+
+<div class="ia-callout ia-callout--{{ type }}">
+  <div class="ia-callout__title">
+    {%- if type == "tip" -%}✅{%- elsif type == "warn" -%}⚠️{%- elsif type == "danger" -%}🛑{%- else -%}ℹ️{%- endif -%}
+    <span>{{ title }}</span>
+  </div>
+  <div class="ia-callout__body">
+    {{ include.content | markdownify }}
+  </div>
+</div>
