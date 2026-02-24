@@ -14,9 +14,6 @@ permalink: /resume/
 
 **Software Developer, Oracle**
 
-Email: <a href="mailto:janakirampuli@gmail.com">janakirampuli@gmail.com</a>  
-LinkedIn: <a href="https://www.linkedin.com/in/janaki-ram-puli/" target="_blank" rel="noopener noreferrer">linkedin.com/in/janaki-ram-puli</a>
-
 **Interests:** Deep Learning & Machine Learning · Distributed Systems · Agentic Systems
 
 ---
