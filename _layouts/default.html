@@ -64,14 +64,37 @@
           {%- endif -%}
         </section>
 
-        <div class="theme-toggle-wrapper">
-          <label class="switch">
-            <input type="checkbox" id="theme-toggle">
-            <span class="slider round">
-              <span class="icon">☀️</span>
-              <span class="icon">🌙</span>
-            </span>
-          </label>
+        <div class="header-actions">
+          <nav class="header-links" aria-label="Profile links">
+            <a class="header-icon-link" href="https://github.com/{{ site.github_username | strip }}" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+              <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M12 .5C5.73.5.75 5.78.75 12.29c0 5.21 3.27 9.63 7.8 11.19.57.11.78-.25.78-.56 0-.28-.01-1.02-.02-2-3.17.71-3.84-1.58-3.84-1.58-.52-1.38-1.27-1.75-1.27-1.75-1.04-.74.08-.72.08-.72 1.15.08 1.76 1.23 1.76 1.23 1.02 1.81 2.68 1.29 3.33.98.1-.76.4-1.29.73-1.58-2.53-.3-5.19-1.31-5.19-5.84 0-1.29.44-2.34 1.16-3.17-.12-.3-.5-1.52.11-3.16 0 0 .95-.32 3.11 1.21a10.4 10.4 0 0 1 2.83-.4c.96 0 1.92.14 2.83.4 2.16-1.53 3.11-1.21 3.11-1.21.61 1.64.23 2.86.11 3.16.72.83 1.16 1.88 1.16 3.17 0 4.54-2.66 5.54-5.2 5.83.41.37.78 1.1.78 2.23 0 1.61-.02 2.9-.02 3.29 0 .31.2.68.79.56 4.52-1.56 7.79-5.98 7.79-11.19C23.25 5.78 18.27.5 12 .5z"/>
+              </svg>
+            </a>
+
+            <a class="header-icon-link" href="https://www.linkedin.com/in/janaki-ram-puli/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
+              <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M20.45 20.45h-3.56v-5.58c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.95v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.65-1.85 3.39-1.85 3.63 0 4.29 2.39 4.29 5.49v6.25zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.56V9h3.56v11.45zM22.23 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.46c.98 0 1.77-.77 1.77-1.72V1.72C24 .77 23.21 0 22.23 0z"/>
+              </svg>
+            </a>
+
+            <a class="header-icon-link" href="mailto:{{ site.email | escape }}" aria-label="Email">
+              <svg class="header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/>
+              </svg>
+            </a>
+          </nav>
+
+          <div class="theme-toggle-wrapper">
+            <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">
+              <span class="theme-toggle__icon" aria-hidden="true">
+                <svg class="theme-toggle__svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <!-- default icon; will be replaced by JS based on theme -->
+                  <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+              </span>
+            </button>
+          </div>
         </div>
         
         
@@ -89,18 +112,32 @@
     <!-- Interactive widgets / progressive enhancements -->
     <script type="module" src="{{ '/assets/js/interactive.js?v=' | append: site.github.build_revision | relative_url }}"></script>
     <script>
-      const toggleCheckbox = document.getElementById('theme-toggle');
+      const toggleButton = document.getElementById('theme-toggle');
+      const toggleIcon = toggleButton?.querySelector('.theme-toggle__icon');
       const darkTheme = document.getElementById('dark-theme');
+
+      const ICON_MOON = `
+        <svg class="theme-toggle__svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      `;
+
+      const ICON_SUN = `
+        <svg class="theme-toggle__svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+      `;
     
       function applyTheme(theme) {
         if (theme === 'dark') {
           document.documentElement.classList.add('dark-mode');
           darkTheme.removeAttribute('disabled');
-          toggleCheckbox.checked = true;
+          if (toggleIcon) toggleIcon.innerHTML = ICON_MOON;
         } else {
           document.documentElement.classList.remove('dark-mode');
           darkTheme.setAttribute('disabled', 'true');
-          toggleCheckbox.checked = false;
+          if (toggleIcon) toggleIcon.innerHTML = ICON_SUN;
         }
       }
     
@@ -114,10 +151,72 @@
         applyTheme('dark');
       }
     
-      toggleCheckbox.addEventListener('change', () => {
-        const newTheme = toggleCheckbox.checked ? 'dark' : 'light';
-        applyTheme(newTheme);
-        localStorage.setItem('theme', newTheme);
+      toggleButton.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.contains('dark-mode');
+        const newTheme = isDark ? 'light' : 'dark';
+
+        // Prefer a “diffusion” animation (from the toggle button) when supported.
+        // Fallback: instant theme toggle.
+        const canAnimate =
+          !!document.startViewTransition &&
+          !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+        if (!canAnimate) {
+          applyTheme(newTheme);
+          localStorage.setItem('theme', newTheme);
+          return;
+        }
+
+        // Compute the center of the button in viewport coords.
+        const rect = toggleButton.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const endRadius = Math.hypot(
+          Math.max(x, window.innerWidth - x),
+          Math.max(y, window.innerHeight - y)
+        );
+
+        document.documentElement.style.setProperty('--vt-x', `${x}px`);
+        document.documentElement.style.setProperty('--vt-y', `${y}px`);
+        document.documentElement.style.setProperty('--vt-r', `${endRadius}px`);
+
+        // Add a transient overlay to simulate “color diffusion” (radial gradient)
+        // while the view transition reveals the new theme.
+        const overlay = document.createElement('div');
+        overlay.className = 'theme-diffuse-overlay';
+        overlay.style.setProperty('--x', `${x}px`);
+        overlay.style.setProperty('--y', `${y}px`);
+        overlay.style.setProperty('--r', `${endRadius}px`);
+
+        const oldBg = getComputedStyle(document.body).backgroundColor;
+        overlay.style.setProperty('--from', oldBg);
+
+        const vt = document.startViewTransition(() => {
+          applyTheme(newTheme);
+          localStorage.setItem('theme', newTheme);
+        });
+
+        vt.ready.then(() => {
+          // Now the new theme styles are applied; read the new bg.
+          const newBg = getComputedStyle(document.body).backgroundColor;
+          overlay.style.setProperty('--to', newBg);
+
+          // Start animation.
+          document.body.appendChild(overlay);
+          // Force style flush so the initial state applies.
+          // eslint-disable-next-line no-unused-expressions
+          overlay.offsetWidth;
+          overlay.classList.add('is-animating');
+
+          // Cleanup.
+          const done = () => overlay.remove();
+          overlay.addEventListener('animationend', done, { once: true });
+        });
+
+        // If the view transition fails/cancels for any reason, don't leave overlay behind.
+        vt.finished.catch(() => {
+          try { overlay.remove(); } catch {}
+        });
       });
     </script>
 

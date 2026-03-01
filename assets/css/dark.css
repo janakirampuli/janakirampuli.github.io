@@ -25,4 +25,11 @@ body {
     border-left: 5px solid #bb86fc;
     color: #ddd;
   }
+
+  /* About page timeline: ensure cards/dots read well in dark mode even if
+     the base theme changes. Most styling is in main.css via CSS variables. */
+  .timeline__logo {
+    /* Keep logos crisp; the dot has a light background in both themes. */
+    filter: none;
+  }
   
