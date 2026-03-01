@@ -13,91 +13,6 @@ img, svg, video, canvas {
     height: auto;
 }
 
-/* Theme diffusion animation (View Transitions API)
-   - Runs when supported (JS uses document.startViewTransition)
-   - Gracefully ignored by browsers without it
-   - Respects prefers-reduced-motion
-*/
-@media (prefers-reduced-motion: no-preference) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 520ms;
-    animation-timing-function: ease-in-out;
-  }
-
-  /* Put the new theme on top; clip it from a circle centered on the toggle */
-  ::view-transition-new(root) {
-    animation-name: theme-reveal;
-  }
-
-  /* Keep the old theme below without animating */
-  ::view-transition-old(root) {
-    animation: none;
-    mix-blend-mode: normal;
-  }
-
-  @keyframes theme-reveal {
-    from { clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 0%)); }
-    to   { clip-path: circle(var(--vt-r, 120vmax) at var(--vt-x, 50%) var(--vt-y, 0%)); }
-  }
-}
-
-/* JS-driven overlay to enhance the “diffusion” feel with a radial gradient */
-@media (prefers-reduced-motion: no-preference) {
-  .theme-diffuse-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    pointer-events: none;
-
-    /* Color-only diffusion overlay (doesn't show/capture underlying text).
-       We diffuse between the two background colors only. */
-    background: radial-gradient(
-      circle 0px at var(--x) var(--y),
-      var(--to) 0%,
-      var(--from) 100%
-    );
-    opacity: 0.95;
-  }
-
-  .theme-diffuse-overlay.is-animating {
-    animation: theme-diffuse 560ms ease-out forwards;
-  }
-
-  @keyframes theme-diffuse {
-    0% {
-      background: radial-gradient(
-        circle 0px at var(--x) var(--y),
-        var(--to) 0%,
-        var(--from) 100%
-      );
-      opacity: 0.98;
-      filter: blur(0px);
-    }
-    70% {
-      background: radial-gradient(
-        circle var(--r) at var(--x) var(--y),
-        var(--to) 0%,
-        color-mix(in srgb, var(--to) 55%, var(--from) 45%) 35%,
-        color-mix(in srgb, var(--to) 35%, var(--from) 65%) 60%,
-        var(--from) 100%
-      );
-      opacity: 0.60;
-      filter: blur(10px);
-    }
-    100% {
-      background: radial-gradient(
-        circle var(--r) at var(--x) var(--y),
-        var(--to) 0%,
-        var(--to) 65%,
-        var(--to) 100%
-      );
-      opacity: 0;
-      filter: blur(0px);
-    }
-  }
-}
-
 body {
     background: #ffffff;
     color: #000000;
@@ -237,11 +152,9 @@ body {
       padding-right: 0;
     }
 
-    .header-actions {
-      position: static;
-      margin-top: 0.6rem;
-      justify-content: flex-end;
-      flex-wrap: wrap;
+    #a-title {
+      display: inline-block;
+      padding-right: 3rem;
     }
   }
 
@@ -273,11 +186,28 @@ body {
   }
 
   .header-links {
+    position: absolute;
+    top: 1.2rem;
+    right: 4.4rem;
+    z-index: 10;
     display: flex;
     align-items: center;
     gap: 0.7rem;
     font-size: 0.95rem;
     white-space: nowrap;
+  }
+
+  /* Mobile: move social icons below the page links row and center them */
+  @media (max-width: 720px) {
+    .header-links {
+      position: static;
+      top: auto;
+      right: auto;
+      z-index: auto;
+      width: 100%;
+      margin-top: 0.6rem;
+      justify-content: center;
+    }
   }
 
   .header-links a {
