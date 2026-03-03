@@ -7,7 +7,7 @@ permalink: /resume/
 <!-- # Janaki Ram Puli -->
 
 <p>
-  <a href="{{ '/assets/files/resume.pdf' | relative_url }}" target="_blank" rel="noopener noreferrer">
+  <a href="{{ '/assets/files/Janaki_Resume.pdf' | relative_url }}" target="_blank" rel="noopener noreferrer">
     Download PDF
   </a>
 </p>
@@ -24,7 +24,7 @@ permalink: /resume/
 | :-- | :-- | :-- | :-- |
 | Aug 2020 - May 2024 | B.Tech, Computer Science | Indian Institute of Technology (IIT) Bombay | 8.31/10 |
 
-**Teaching Assistant — IIT Bombay**
+**Teaching Assistant -- IIT Bombay**
 
 - PH107: Quantum Physics and Applications  
 - PH108: Electricity and Magnetism  
@@ -35,39 +35,60 @@ permalink: /resume/
 
 ## Work Experience
 
-### **Software Developer (IC2) | Oracle — MicroTx Agentic Workflows**
+### **Software Developer (IC2) | Oracle -- MicroTx Agentic Workflows**
 *Jul 2024 - Present*
 
-- Researched workflow orchestrators (Netflix Conductor, Temporal) for scalability, durability, and system design trade-offs.
-- Designed extensions enabling **agentic workflows**, integrating LLMs with microservices in long-running workflows.
-- Authored design documents and built prototypes for durable LLM-integrated microservice orchestration for enterprise systems.
+- Evaluated workflow execution engines (Conductor, Temporal, Restate) and led adoption of an open-source orchestrator; analyzed consistency, failure recovery, and scalability trade-offs.
+- Extended the orchestration platform with AI-native tasks and service connectors, enabling LLM-driven agentic workflows coordinating long-running microservice operations.
+- Implemented durable workflow execution using persistent state storage, retries, compensation (saga-style recovery), and idempotent task handling across distributed services.
+- Currently hardening the platform with a focus on security and performance to improve reliability, low-latency scheduling, and high-throughput task processing before release.
 
 ---
 
 ## Internships
 
-### **Software Developer Intern | Oracle — MicroTx Distributed Transactions**
+### **Software Developer Intern | Oracle -- MicroTx Distributed Transactions**
 *Summer 2023*
 
 - Designed and integrated **LRA / Saga patterns** for reliable distributed transaction management.
-- Implemented and evaluated distributed transaction approaches (XA, LRA, TCC) with native Spring support.
+- Developed SDKs for distributed transaction protocols: XA (two-phase commit), LRA (long-running transactions), and TCC (try-confirm-cancel), with native Spring Boot integration.
 
 ### **Software Developer | HeltarAI**
 *Summer 2022*
 
 - Built a customer communication platform integrating Meta WhatsApp Cloud Graph API for automated workflows.
-- Implemented real-time bidirectional messaging using socket-based communication.
+- Developed real-time bidirectional messaging using WebSockets for low-latency client-server communication.
 
 ---
 
 ## Key Projects
 
+### **Language Modeling from Scratch (CS336)**
+
+- Built foundational language modeling components from the ground up, implementing Byte-Pair Encoding (BPE) tokenization and autoregressive transformer blocks.
+- Studied low-level GPU programming by writing custom CUDA kernels for matrix multiplications and vector additions.
+
+---
+
+### **Deep Learning for Computer Vision (CS231n)**
+
+- Built fundamental machine learning classifiers (k-NN, SVM, Softmax) and a two-layer neural network from scratch using NumPy on CIFAR-10.
+- Implemented modular deep learning components with custom forward and backward passes for CNNs, Batch Normalization, and Dropout.
+- Developed an image captioning system using RNNs and LSTMs, and implemented methods including SimCLR, CLIP, DINO, and DDPM.
+
+---
+
+### **Natural Language Processing with Deep Learning (CS224n)**
+
+- Analyzed and visualized Word2Vec and GloVe embeddings, evaluating semantic and syntactic structure through similarity and analogy probes.
+- Developed a sequence-to-sequence Neural Machine Translation (NMT) model using an RNN encoder-decoder with multiplicative attention.
+- Implemented a Transformer model from scratch, including multi-head self-attention, positional encoding, and feed-forward blocks.
+
 ### **Adversarial ML: Evasion Attacks on Classifiers**
-*B.Tech Research Project — Advisor: Prof. Virendra Singh (Spring 2024)*
+*B.Tech Research Project -- Advisor: Prof. Virendra Singh (Spring 2024)*
 
 - Studied adversarial ML in security-critical settings.
-- Implemented gradient-based attacks against linear models and SVM classifiers.
-- Supported error-generic and targeted evasion attacks.
+- Implemented gradient-based attacks against linear models and SVM classifiers for error-generic and error-specific evasion.
 - Evaluated on MNIST and explored defenses such as adversarial training.
 
 ---
@@ -77,50 +98,16 @@ permalink: /resume/
 
 - Built a multilingual extractive QA system supporting Indian languages.
 - Fine-tuned BERT on SQuAD (100k+ question-answer pairs across 500+ Wikipedia articles).
-- Achieved **80% Exact Match** and **88% F1 score**.
+- Achieved strong evaluation results with an **80% Exact Match** and **88% F1 score**.
 
 ---
 
-### **Eye Health Monitor — Low-Cost Wearable Device**
+### **Eye Health Monitor -- Low-Cost Wearable Device**
 *Koita Center for Digital Health, IIT Bombay (Fall 2023)*
 
 - Prototyped wearable using ESP32-CAM and macro lens to capture ocular images.
-- Curated datasets for cataract, glaucoma, uveitis, and related conditions.
-- Designed CNN and Vision Transformer (ViT) models for automated eye disease classification.
-
----
-
-### **Compiler for C-like Language**
-*Guide: Prof. Amithaba Sanyal (Spring 2023)*
-
-- Built a compiler using Flex and Bison with robust type checking.
-- Applied Sethi-Ullman algorithm for optimal register allocation and improved code generation efficiency.
-
----
-
-### **Feature Additions to xv6 Operating System**
-*Guide: Prof. Purushottam Kulkarni (Fall 2022)*
-
-- Implemented system calls for process and memory statistics.
-- Added `mmap` with page-fault based lazy allocation.
-- Implemented multithreading using `clone` and `join`.
-- Evaluated CPU scheduling using FCFS.
-
----
-
-### **Deep Learning for NLP**
-*Guide: Prof. Pushpak Bhattacharya (Fall 2022)*
-
-- Built POS tagger using Hidden Markov Model and Viterbi algorithm.
-- Implemented Word2Vec-based FFNN POS tagging model.
-
----
-
-### **Peer-to-Peer File Sharing System**
-*Guide: Prof. Kameswari Chebrolu (Spring 2022)*
-
-- Developed a P2P network for search and file transfer.
-- Each peer acted as both server and client to enable two-way communication.
+- Collected and curated datasets for cataracts, glaucoma, uveitis, and related conditions.
+- Designed CNN and Vision Transformer (ViT) architectures for automated eye disease classification.
 
 ---
 
@@ -141,8 +128,19 @@ permalink: /resume/
 
 - Native Integration of Retrieval-Augmented Generation (RAG) pipelines in durable workflows
 - System and Method for Agentic Task Execution in MicroTx Workflow Engine
+- Multi-Agent Orchestration with Dynamic Workflow Composition using Agentic planner in workflow
+- Transaction System Task for Distributed Transactions in MicroTx Workflow
+
+---
+
+## Extracurricular Activities
+
+- Participated in Oracle volunteer activities supporting community initiatives.
+- Completed an academic year-long fitness course under NSO, IIT Bombay.
+- Competed in volleyball and cricket tournaments conducted by TelCA Sports Council, IIT Bombay.
+- Completed two years of Sanskrit study (intermediate level) with an A1 grade.
 
 ---
 
 
-*Last updated: 22 Feb, 2026*
+*Last updated: 3 Mar, 2026*
