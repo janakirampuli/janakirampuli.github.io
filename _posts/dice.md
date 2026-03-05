@@ -4,6 +4,7 @@ title: "Roll the dice"
 tags: ["poem"]
 author: "Charles Bukowski"
 date: 2025-04-17
+published: true
 ---
 <pre class="poem">
 Roll the Dice

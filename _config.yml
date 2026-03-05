@@ -29,10 +29,10 @@ github_username:  janakirampuli
 
 # Explicit header navigation (avoid auto-listing every page)
 nav:
-  - title: Home
-    url: /
   - title: About
     url: /about/
+  - title: Blog
+    url: /blog/
   - title: Notes
     url: /notes/
   - title: Projects
@@ -65,6 +65,11 @@ permalink: /blog/:title.html
 # Incremental builds can miss newly added/updated posts in some setups.
 # Keeping this off makes local builds and GitHub Pages builds more reliable.
 incremental: false
+
+# Ensure Jekyll processes `_posts/` even when files don't follow the
+# default `YYYY-MM-DD-title.md` naming convention.
+include:
+  - _posts
 
 collections:
   notes:
