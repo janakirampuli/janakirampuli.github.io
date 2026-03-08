@@ -1,0 +1,12 @@
+{%- assign src = include.src | default: nil -%}
+{%- assign caption = include.caption | default: nil -%}
+{%- assign controls = include.controls | default: true -%}
+
+<figure class="ia-media">
+  <div class="ia-media__frame">
+    <audio class="ia-media__audio" {% if src %}src="{{ src | relative_url }}"{% endif %} {% if controls %}controls{% endif %}></audio>
+  </div>
+  {%- if caption -%}
+    <figcaption class="ia-media__caption">{{ caption | markdownify | strip | replace: '<p>', '' | replace: '</p>', '' }}</figcaption>
+  {%- endif -%}
+</figure>

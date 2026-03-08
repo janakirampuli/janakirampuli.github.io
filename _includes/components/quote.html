@@ -1,0 +1,20 @@
+{%- assign text = include.text | default: nil -%}
+{%- assign author = include.author | default: nil -%}
+{%- assign source = include.source | default: nil -%}
+{%- assign body = include.body | default: nil -%}
+
+<figure class="ia-quote">
+  <blockquote class="ia-quote__body">
+    {%- if body -%}
+      {{ body | markdownify }}
+    {%- elsif text -%}
+      {{ text | markdownify }}
+    {%- endif -%}
+  </blockquote>
+  {%- if author or source -%}
+    <figcaption class="ia-quote__cite">
+      {%- if author -%}<span class="ia-quote__author">— {{ author }}</span>{%- endif -%}
+      {%- if source -%}<span class="ia-quote__source">, <em>{{ source }}</em></span>{%- endif -%}
+    </figcaption>
+  {%- endif -%}
+</figure>

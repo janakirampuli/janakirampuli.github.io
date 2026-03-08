@@ -190,189 +190,6 @@ class JsRunner extends HTMLElement {
   }
 }
 
-/* ---------------------------------
- * <tile-matmul-demo> web component
- * ---------------------------------
-   A lightweight explorable widget:
-   show naive vs tiled access intuition.
-*/
-class TileMatmulDemo extends HTMLElement {
-  connectedCallback() {
-    if (this._mounted) return;
-    this._mounted = true;
-
-    const sizeAttr = this.getAttribute('size');
-    const M = Math.min(16, Math.max(2, parseInt(this.getAttribute('m') || sizeAttr || '8', 10)));
-    const N = Math.min(16, Math.max(2, parseInt(this.getAttribute('n') || sizeAttr || '8', 10)));
-    const K = Math.min(16, Math.max(2, parseInt(this.getAttribute('k') || sizeAttr || '8', 10)));
-
-    // Wider canvas: earlier version could clip the C matrix on some screens.
-    const canvas = el('canvas', { width: 880, height: 320, style: 'width:100%;max-width:880px;height:auto;' });
-    const ctx = canvas.getContext('2d');
-
-    const tileRange = el('input', { type: 'range', min: '1', max: String(Math.min(8, M, N, K)), value: '2' });
-    const tileLabel = el('span', {}, '2');
-    const modeSelect = el('select', {}, [
-      el('option', { value: 'naive' }, 'naive'),
-      el('option', { value: 'tiled' }, 'tiled'),
-    ]);
-    const stepRange = el('input', { type: 'range', min: '0', max: String(K - 1), value: '0' });
-    const stepLabel = el('span', {}, '0');
-
-    const wrapper = el('div', { class: 'ia-widget' }, [
-      el('div', { class: 'ia-widget__row' }, [
-        el('strong', {}, 'Tiled matmul intuition'),
-        el('span', { style: 'flex:1' }, ''),
-        el('label', {}, ['mode', modeSelect]),
-        el('label', {}, ['tile', tileRange, tileLabel]),
-        el('label', {}, ['k', stepRange, stepLabel]),
-      ]),
-      canvas,
-      el('div', { style: 'margin-top:0.6rem;color:var(--ia-muted);font-size:0.95rem;' },
-        'Move k to see which A row and B column are touched. In tiled mode, we highlight a tile that would be loaded into shared memory.')
-    ]);
-
-    this.appendChild(wrapper);
-
-    const draw = () => {
-      const tile = parseInt(tileRange.value, 10);
-      const mode = modeSelect.value;
-      const k = parseInt(stepRange.value, 10);
-      tileLabel.textContent = String(tile);
-      stepLabel.textContent = String(k);
-
-      const W = canvas.width;
-      const H = canvas.height;
-      ctx.clearRect(0, 0, W, H);
-
-      const isDark = document.documentElement.classList.contains('dark-mode');
-      const ink = isDark ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.82)';
-      const gridInk = isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.18)';
-
-      const margin = 18;
-      const gap = 86;
-      const maxGrid = 170;
-
-      const cellFor = (rows, cols) => Math.max(8, Math.floor(maxGrid / Math.max(rows, cols)));
-
-      const cellA = cellFor(M, K);
-      const cellB = cellFor(K, N);
-      const cellC = cellFor(M, N);
-
-      const wA = K * cellA;
-      const hA = M * cellA;
-      const wB = N * cellB;
-      const hB = K * cellB;
-      const wC = N * cellC;
-      const hC = M * cellC;
-
-      const top = 70;
-      const ax = margin;
-      const ay = top;
-      const bx = ax + wA + gap;
-      const by = top;
-      const cx = bx + wB + gap;
-      const cy = top;
-
-      // Choose a fixed output element C(i,j)
-      const i = Math.floor(M / 2);
-      const j = Math.floor(N / 2);
-
-      const drawGrid = (x0, y0, rows, cols, cell, label) => {
-        const w = cols * cell;
-        const h = rows * cell;
-        ctx.strokeStyle = gridInk;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x0, y0, w, h);
-        for (let c = 1; c < cols; c++) {
-          ctx.beginPath();
-          ctx.moveTo(x0 + c * cell, y0);
-          ctx.lineTo(x0 + c * cell, y0 + h);
-          ctx.stroke();
-        }
-        for (let r = 1; r < rows; r++) {
-          ctx.beginPath();
-          ctx.moveTo(x0, y0 + r * cell);
-          ctx.lineTo(x0 + w, y0 + r * cell);
-          ctx.stroke();
-        }
-
-        ctx.fillStyle = ink;
-        ctx.font = '14px ui-sans-serif, system-ui';
-        ctx.fillText(label, x0, y0 - 10);
-      };
-
-      drawGrid(ax, ay, M, K, cellA, `A (${M}×${K})`);
-      drawGrid(bx, by, K, N, cellB, `B (${K}×${N})`);
-      drawGrid(cx, cy, M, N, cellC, `C (${M}×${N})`);
-
-      // Highlight C(i,j)
-      ctx.fillStyle = 'rgba(0, 122, 204, 0.22)';
-      ctx.fillRect(cx + j * cellC, cy + i * cellC, cellC, cellC);
-      ctx.strokeStyle = 'rgba(0, 122, 204, 0.92)';
-      ctx.strokeRect(cx + j * cellC, cy + i * cellC, cellC, cellC);
-
-      // Highlight A(i,k) and B(k,j)
-      ctx.fillStyle = mode === 'naive' ? 'rgba(185, 28, 28, 0.22)' : 'rgba(19, 115, 51, 0.18)';
-      ctx.fillRect(ax + k * cellA, ay + i * cellA, cellA, cellA);
-      ctx.fillRect(bx + j * cellB, by + k * cellB, cellB, cellB);
-
-      // Naive mode: highlight the full A row and B column used by the dot product
-      if (mode === 'naive') {
-        ctx.fillStyle = 'rgba(185, 28, 28, 0.09)';
-        ctx.fillRect(ax, ay + i * cellA, wA, cellA);
-        ctx.fillRect(bx + j * cellB, by, cellB, hB);
-      }
-
-      // Tiled mode: highlight tiles staged for reuse
-      if (mode === 'tiled') {
-        const t = tile;
-        const tileK = Math.floor(k / t);
-        const tileI = Math.floor(i / t);
-        const tileJ = Math.floor(j / t);
-
-        // A tile covers rows [tileI*t ..] and cols [tileK*t ..]
-        const aRow0 = tileI * t;
-        const aCol0 = tileK * t;
-        const aRows = Math.min(t, M - aRow0);
-        const aCols = Math.min(t, K - aCol0);
-
-        // B tile covers rows [tileK*t ..] and cols [tileJ*t ..]
-        const bRow0 = tileK * t;
-        const bCol0 = tileJ * t;
-        const bRows = Math.min(t, K - bRow0);
-        const bCols = Math.min(t, N - bCol0);
-
-        ctx.fillStyle = 'rgba(19, 115, 51, 0.10)';
-        ctx.fillRect(ax + aCol0 * cellA, ay + aRow0 * cellA, aCols * cellA, aRows * cellA);
-        ctx.fillRect(bx + bCol0 * cellB, by + bRow0 * cellB, bCols * cellB, bRows * cellB);
-        ctx.strokeStyle = 'rgba(19, 115, 51, 0.80)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(ax + aCol0 * cellA, ay + aRow0 * cellA, aCols * cellA, aRows * cellA);
-        ctx.strokeRect(bx + bCol0 * cellB, by + bRow0 * cellB, bCols * cellB, bRows * cellB);
-      }
-
-      // Explanation text
-      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.68)';
-      ctx.font = '13px ui-sans-serif, system-ui';
-      const msg = mode === 'naive'
-        ? `naive: compute C[i=${i}, j=${j}] by scanning k=0..${K - 1} (A row i, B column j)`
-        : `tiled: stage A and B tiles (tile=${tile}) for reuse while accumulating C[i=${i}, j=${j}]`;
-      ctx.fillText(msg, margin, 28);
-    };
-
-    tileRange.addEventListener('input', draw);
-    modeSelect.addEventListener('change', draw);
-    stepRange.addEventListener('input', draw);
-
-    // Redraw when theme toggles (your site toggles class on html)
-    const mo = new MutationObserver(draw);
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-
-    draw();
-  }
-}
-
 /* -----------------
  * Mermaid diagrams
  * -----------------
@@ -403,13 +220,44 @@ async function enhanceMermaid(root = document) {
 }
 
 customElements.define('js-runner', JsRunner);
-customElements.define('tile-matmul-demo', TileMatmulDemo);
 
 // Run enhancements
 enhanceTabs();
 enhanceCodeCopy();
 enhanceLightbox();
 enhanceMermaid();
+
+/* -----------------------------
+ * TODO checklist enhancement
+ * -----------------------------
+   Kramdown task lists are rendered as:
+     <li class="task-list-item"><input type="checkbox" ...>text</li>
+   We wrap the text in a span so completed items can be struck through
+   without affecting the checkbox itself.
+*/
+function enhanceTodoLists(root = document) {
+  const items = root.querySelectorAll('.ia-todo__body li.task-list-item');
+  for (const li of items) {
+    const checkbox = li.querySelector('input[type="checkbox"]');
+    if (!checkbox) continue;
+
+    let text = li.querySelector('.ia-task-text');
+    if (!text) {
+      text = el('span', { class: 'ia-task-text' });
+      const nodes = Array.from(li.childNodes);
+      for (const node of nodes) {
+        if (node === checkbox) continue;
+        text.appendChild(node);
+      }
+      li.appendChild(text);
+    }
+
+    const done = checkbox.checked || checkbox.hasAttribute('checked');
+    li.classList.toggle('is-done', done);
+  }
+}
+
+enhanceTodoLists();
 
 /* -----------------------------
  * Stepper enhancement
@@ -456,182 +304,6 @@ function enhanceSteppers(root = document) {
 }
 
 enhanceSteppers();
-
-/* ---------------------------------
- * Distill-ish scrollytelling
- * ---------------------------------
-   Pattern: sticky figure on the left, narrative steps on the right.
-   We highlight the active step and update the figure.
-*/
-function enhanceScrolly(root = document) {
-  const scrollys = root.querySelectorAll('[data-scrolly]');
-  for (const scrolly of scrollys) {
-    const steps = Array.from(scrolly.querySelectorAll('.ia-scrolly__step'));
-    if (steps.length === 0) continue;
-
-    const canvas = scrolly.querySelector('canvas');
-    const ctx = canvas?.getContext?.('2d');
-
-    const isDark = () => document.documentElement.classList.contains('dark-mode');
-
-    function drawFigure(activeIndex) {
-      if (!ctx || !canvas) return;
-      const W = canvas.width;
-      const H = canvas.height;
-      ctx.clearRect(0, 0, W, H);
-
-      const ink = isDark() ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.82)';
-      const soft = isDark() ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
-      const accent = 'rgba(0,122,204,0.85)';
-
-      // Simple “sequence -> state -> output” diagram with step-dependent emphasis.
-      const margin = 18;
-      const boxW = (W - margin * 2);
-      const seqY = 26;
-      const seqH = 56;
-      const midY = 110;
-      const outY = 200;
-
-      // Sequence tokens
-      const tokens = 8;
-      const gap = 8;
-      const tW = (boxW - gap * (tokens - 1)) / tokens;
-
-      ctx.font = '13px ui-sans-serif, system-ui';
-      ctx.fillStyle = ink;
-      ctx.fillText('sequence', margin, 18);
-      for (let i = 0; i < tokens; i++) {
-        const x = margin + i * (tW + gap);
-        ctx.fillStyle = soft;
-        ctx.fillRect(x, seqY, tW, seqH);
-        ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.16)';
-        ctx.strokeRect(x, seqY, tW, seqH);
-
-        // Make step changes visually obvious
-        const isHot = (activeIndex === 0 && i === 0) || (activeIndex === 1 && i === tokens - 1);
-        if (isHot) {
-          ctx.fillStyle = 'rgba(0,122,204,0.18)';
-          ctx.fillRect(x, seqY, tW, seqH);
-          ctx.strokeStyle = accent;
-          ctx.lineWidth = 4;
-          ctx.strokeRect(x + 2, seqY + 2, tW - 4, seqH - 4);
-          ctx.lineWidth = 1;
-        }
-      }
-
-      // Hidden state box
-      ctx.fillStyle = ink;
-      ctx.fillText('hidden state', margin, midY - 10);
-      ctx.fillStyle = 'rgba(19,115,51,0.10)';
-      ctx.fillRect(margin, midY, boxW, 60);
-      ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.16)';
-      ctx.strokeRect(margin, midY, boxW, 60);
-
-      // Output box
-      ctx.fillStyle = ink;
-      ctx.fillText('output', margin, outY - 10);
-      ctx.fillStyle = 'rgba(185,28,28,0.08)';
-      ctx.fillRect(margin, outY, boxW, 60);
-      ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.16)';
-      ctx.strokeRect(margin, outY, boxW, 60);
-
-      // Arrows
-      const arrow = (x0, y0, x1, y1, color) => {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.stroke();
-        // arrow head
-        const a = Math.atan2(y1 - y0, x1 - x0);
-        const L = 10;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x1 - L * Math.cos(a - 0.35), y1 - L * Math.sin(a - 0.35));
-        ctx.lineTo(x1 - L * Math.cos(a + 0.35), y1 - L * Math.sin(a + 0.35));
-        ctx.closePath();
-        ctx.fill();
-        ctx.lineWidth = 1;
-      };
-
-      const fromY = seqY + seqH;
-      arrow(margin + boxW * 0.5, fromY, margin + boxW * 0.5, midY, activeIndex >= 1 ? accent : (isDark() ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)'));
-      arrow(margin + boxW * 0.5, midY + 60, margin + boxW * 0.5, outY, activeIndex >= 2 ? accent : (isDark() ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)'));
-
-      // Title
-      ctx.fillStyle = isDark() ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.65)';
-      ctx.font = '12px ui-sans-serif, system-ui';
-      const titles = [
-        'Step 1: a token can be “memorized” and carried forward',
-        'Step 2: later tokens can query what was stored',
-        'Step 3: output depends on the carried information',
-      ];
-      ctx.fillText(titles[Math.min(activeIndex, titles.length - 1)], margin, H - 12);
-    }
-
-    let current = -1;
-    function setActive(i) {
-      if (i === current) return;
-      current = i;
-      steps.forEach((s, idx) => s.classList.toggle('is-active', idx === i));
-      drawFigure(i);
-    }
-
-    // Robust scroll selection (works even if IntersectionObserver thresholds are finicky)
-    let ticking = false;
-    function updateFromScroll() {
-      // Pick the step that is closest to a preferred viewport “reading line”.
-      // Using a lower line (55%) tends to feel more natural with sticky figures.
-      const targetY = window.innerHeight * 0.55;
-
-      let bestIdx = 0;
-      let bestScore = Infinity;
-
-      for (let i = 0; i < steps.length; i++) {
-        const r = steps[i].getBoundingClientRect();
-        // If it's completely offscreen, deprioritize.
-        const visible = r.bottom > 0 && r.top < window.innerHeight;
-        const stepCenter = r.top + r.height * 0.5;
-        const dist = Math.abs(stepCenter - targetY);
-        const penalty = visible ? 0 : window.innerHeight; // push offscreen candidates away
-        const score = dist + penalty;
-        if (score < bestScore) {
-          bestScore = score;
-          bestIdx = i;
-        }
-      }
-
-      setActive(bestIdx);
-    }
-
-    function onScroll() {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        updateFromScroll();
-      });
-    }
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-
-    // Redraw on theme change
-    const mo = new MutationObserver(() => {
-      const active = steps.findIndex(s => s.classList.contains('is-active'));
-      drawFigure(Math.max(0, active));
-    });
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-
-    // Initial
-    setActive(0);
-    updateFromScroll();
-  }
-}
-
-enhanceScrolly();
 
 /* ---------------------------------
  * Horizontal sequence scroller (x-axis)

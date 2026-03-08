@@ -1,0 +1,8 @@
+{%- assign href = include.href | default: nil -%}
+{%- assign label = include.label | default: href -%}
+{%- assign meta = include.meta | default: nil -%}
+
+<a class="ia-file" href="{{ href | relative_url }}">
+  <span class="ia-file__label">{{ label }}</span>
+  {%- if meta -%}<span class="ia-file__meta">{{ meta }}</span>{%- endif -%}
+</a>

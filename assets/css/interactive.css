@@ -97,25 +97,11 @@ html.dark-mode {
   margin: 0;
 }
 
-.ia-section__meta {
-  font-size: 0.92rem;
-  color: var(--ia-muted);
-  border: 1px solid var(--ia-border);
-  border-radius: 999px;
-  padding: 0.1rem 0.55rem;
-  background: rgba(0,0,0,0.03);
-}
-html.dark-mode .ia-section__meta { background: rgba(255,255,255,0.05); }
-
-.ia-usage pre {
-  margin-top: 0.6rem;
-}
-
 .ia-toc {
-  border: 1px solid var(--ia-border);
-  border-radius: var(--ia-radius);
-  background: var(--ia-bg-soft);
-  padding: 0.85rem 1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   margin: 1.2rem 0 2rem 0;
 }
 
@@ -126,10 +112,10 @@ html.dark-mode .ia-section__meta { background: rgba(255,255,255,0.05); }
  * Callouts
  * -------- */
 .ia-callout {
-  border: 1px solid var(--ia-border);
-  border-radius: var(--ia-radius);
-  background: var(--ia-bg-soft);
-  padding: 0.9rem 1rem;
+  border-left: 4px solid var(--ia-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.15rem 0 0.15rem 0.9rem;
   margin: 1.1rem 0;
 }
 
@@ -141,6 +127,11 @@ html.dark-mode .ia-section__meta { background: rgba(255,255,255,0.05); }
   margin-bottom: 0.4rem;
 }
 
+.ia-callout--info { border-left-color: var(--ia-accent); }
+.ia-callout--tip { border-left-color: var(--ia-good); }
+.ia-callout--warn { border-left-color: var(--ia-warn); }
+.ia-callout--danger { border-left-color: var(--ia-bad); }
+
 .ia-callout--info .ia-callout__title { color: var(--ia-accent); }
 .ia-callout--tip .ia-callout__title { color: var(--ia-good); }
 .ia-callout--warn .ia-callout__title { color: var(--ia-warn); }
@@ -148,6 +139,154 @@ html.dark-mode .ia-section__meta { background: rgba(255,255,255,0.05); }
 
 .ia-callout__body > :first-child { margin-top: 0; }
 .ia-callout__body > :last-child { margin-bottom: 0; }
+
+/* ----------------
+ * Research blocks
+ * ---------------- */
+.ia-statement {
+  border-left: 4px solid var(--ia-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.15rem 0 0.15rem 0.9rem;
+  margin: 1.1rem 0;
+}
+
+.ia-statement__header {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 0.45rem;
+}
+
+.ia-statement__kind {
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.ia-statement__title {
+  color: var(--ia-muted);
+  font-weight: 700;
+}
+
+.ia-statement__body > :first-child { margin-top: 0; }
+.ia-statement__body > :last-child { margin-bottom: 0; }
+
+.ia-statement--definition .ia-statement__kind { color: var(--ia-accent); }
+.ia-statement--theorem .ia-statement__kind { color: var(--ia-good); }
+.ia-statement--lemma .ia-statement__kind { color: var(--ia-good); }
+.ia-statement--proof .ia-statement__kind { color: var(--ia-warn); }
+
+/* Quote */
+.ia-quote {
+  border-left: 4px solid var(--ia-accent);
+  padding-left: 1rem;
+  margin: 1.2rem 0;
+}
+
+.ia-quote__body {
+  margin: 0;
+  color: var(--ia-text);
+  font-style: italic;
+  font-size: 1.03rem;
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.ia-quote__body > :first-child { margin-top: 0; }
+.ia-quote__body > :last-child { margin-bottom: 0; }
+
+.ia-quote__cite {
+  margin-top: 0.4rem;
+  color: var(--ia-muted);
+  font-size: 0.95rem;
+}
+
+/* TODO / checklist container */
+.ia-todo {
+  border-left: 4px solid var(--ia-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.15rem 0 0.15rem 0.9rem;
+  margin: 1.1rem 0;
+}
+
+.ia-todo__header {
+  font-weight: 900;
+  margin-bottom: 0.45rem;
+}
+
+.ia-todo__body > :first-child { margin-top: 0; }
+.ia-todo__body > :last-child { margin-bottom: 0; }
+
+/* Strike completed tasks in markdown checklists (kramdown task lists) */
+.ia-todo__body li.task-list-item {
+  list-style: none;
+}
+
+.ia-todo__body li.task-list-item input[type="checkbox"] {
+  margin-right: 0.55rem;
+}
+
+.ia-todo__body li.task-list-item.is-done .ia-task-text,
+.ia-todo__body li.task-list-item:has(input[type="checkbox"][checked]) {
+  text-decoration: line-through;
+  color: var(--ia-muted);
+}
+
+/* Toggle list wrapper (details inside) */
+.ia-toggles {
+  margin: 1.1rem 0;
+}
+
+.ia-toggles__title {
+  font-weight: 900;
+  margin-bottom: 0.6rem;
+}
+
+.ia-toggles details { margin: 0.65rem 0; }
+
+/* Nicer nested details indentation */
+.ia-toggles details details {
+  margin-left: 1.1rem;
+}
+
+/* Media */
+.ia-media {
+  margin: 1.4rem 0;
+}
+
+.ia-media__frame {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+html.dark-mode .ia-media__frame { background: transparent; }
+
+.ia-media__video,
+.ia-media__audio {
+  width: 100%;
+}
+
+.ia-media__caption {
+  margin-top: 0.55rem;
+  font-size: 0.95rem;
+  color: var(--ia-muted);
+}
+
+/* File link */
+.ia-file {
+  display: inline;
+  text-decoration: underline;
+  text-decoration-thickness: from-font;
+  text-underline-offset: 2px;
+  color: var(--ia-accent);
+}
+
+.ia-file__label { font-weight: 700; }
+.ia-file__meta { color: var(--ia-muted); font-size: 0.92rem; }
 
 /* ---------
  * Figures
@@ -224,8 +363,8 @@ html.dark-mode .ia-lightbox__close {
 
 .ia-sidenote__ref {
   font-variant-numeric: tabular-nums;
-  font-size: 0.85em;
-  vertical-align: super;
+  font-size: 0.78em;
+  vertical-align: sub;
   color: var(--ia-accent);
   cursor: pointer;
   text-decoration: none;
@@ -239,6 +378,12 @@ html.dark-mode .ia-lightbox__close {
   border-radius: 10px;
   background: var(--ia-bg-soft);
   color: var(--ia-muted);
+}
+
+.ia-sidenote__label {
+  color: var(--ia-accent);
+  font-weight: 700;
+  margin-right: 0.25rem;
 }
 
 @media (min-width: 1100px) {
@@ -364,41 +509,6 @@ html.dark-mode .ia-cite__bubble { background: rgba(0,0,0,0.95); }
 .ia-stepper__panel[hidden] { display: none; }
 
 /* -------------------------
- * Distill-ish scrollytelling
- * ------------------------- */
-.ia-scrolly {
-  display: grid;
-  grid-template-columns: minmax(260px, 380px) 1fr;
-  gap: 1.25rem;
-  align-items: start;
-  margin: 1.2rem 0;
-}
-
-@media (max-width: 900px) {
-  .ia-scrolly {
-    grid-template-columns: 1fr;
-  }
-}
-
-.ia-scrolly__figure {
-  position: sticky;
-  top: 1rem;
-  border: 1px solid var(--ia-border);
-  border-radius: var(--ia-radius);
-  background: var(--ia-bg-soft);
-  padding: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.ia-scrolly__figure canvas {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-/* -------------------------
  * Horizontal sequence scroller (x-axis)
  * ------------------------- */
 .ia-xscrolly {
@@ -435,79 +545,6 @@ html.dark-mode .ia-cite__bubble { background: rgba(0,0,0,0.95); }
   font-size: 0.92rem;
 }
 
-.ia-xscrolly__rail {
-  display: flex;
-  gap: 0.55rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0.25rem 0.2rem 0.6rem 0.2rem;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  border-radius: 12px;
-  border: 1px solid var(--ia-border);
-  background: rgba(0,0,0,0.02);
-  width: 100%;
-}
-html.dark-mode .ia-xscrolly__rail { background: rgba(255,255,255,0.04); }
-
-/* a little "grab" affordance on desktop */
-.ia-xscrolly__rail {
-  cursor: grab;
-}
-.ia-xscrolly__rail:active {
-  cursor: grabbing;
-}
-
-.ia-xscrolly__rail:focus {
-  outline: 2px solid rgba(0,122,204,0.35);
-  outline-offset: 4px;
-}
-
-.ia-xscrolly__item {
-  flex: 0 0 auto;
-  scroll-snap-align: center;
-  width: auto;
-  min-width: 44px;
-  min-height: 0;
-  border: 1px solid var(--ia-border);
-  border-radius: 999px;
-  background: rgba(0,0,0,0.02);
-  padding: 0.25rem 0.55rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  font-variant-numeric: tabular-nums;
-}
-html.dark-mode .ia-xscrolly__item { background: rgba(255,255,255,0.04); }
-
-.ia-xscrolly__item.is-active {
-  border-color: rgba(0, 122, 204, 0.65);
-  box-shadow: 0 12px 30px rgba(0,0,0,0.08);
-}
-html.dark-mode .ia-xscrolly__item.is-active {
-  border-color: rgba(0, 122, 204, 0.78);
-  box-shadow: 0 12px 30px rgba(0,0,0,0.22);
-}
-
-.ia-scrolly__step {
-  border-left: 3px solid transparent;
-  padding: 0.75rem 0.85rem;
-  margin: 0 0 1rem 0;
-  border-radius: 10px;
-  background: rgba(0,0,0,0.02);
-  min-height: 140px;
-}
-html.dark-mode .ia-scrolly__step { background: rgba(255,255,255,0.04); }
-
-.ia-scrolly__step.is-active {
-  border-left-color: var(--ia-accent);
-  background: rgba(0, 122, 204, 0.07);
-}
-html.dark-mode .ia-scrolly__step.is-active {
-  background: rgba(0, 122, 204, 0.14);
-}
-
 .ia-tooltip:hover .ia-tooltip__bubble,
 .ia-tooltip:focus-within .ia-tooltip__bubble {
   opacity: 1;
@@ -518,8 +555,8 @@ html.dark-mode .ia-scrolly__step.is-active {
  * ---- */
 .ia-tabs {
   border: 1px solid var(--ia-border);
-  border-radius: var(--ia-radius);
-  overflow: hidden;
+  border-radius: 10px;
+  overflow: clip;
   margin: 1.2rem 0;
 }
 
@@ -527,7 +564,7 @@ html.dark-mode .ia-scrolly__step.is-active {
   display: flex;
   gap: 0.35rem;
   padding: 0.5rem;
-  background: var(--ia-bg-soft);
+  background: transparent;
   border-bottom: 1px solid var(--ia-border);
   flex-wrap: wrap;
 }
@@ -565,6 +602,32 @@ pre {
   position: relative;
 }
 
+/* Avoid “double boxing”: if Rouge adds a border/background via theme CSS,
+   let this stylesheet keep code blocks minimal. */
+pre, pre code, .highlight {
+  border: 0;
+  box-shadow: none;
+}
+
+/* Override main.css light-mode borders on Rouge wrappers to avoid double boxes */
+html:not(.dark-mode) pre,
+html:not(.dark-mode) .highlight,
+html:not(.dark-mode) pre.highlight,
+html:not(.dark-mode) .highlight pre {
+  border: 0 !important;
+}
+
+/* Keep a single “code block” visual: background + subtle rounding on the pre only */
+pre {
+  background: var(--ia-code-bg);
+  border-radius: 10px;
+}
+
+/* If Rouge wraps as .highlight > pre, make wrapper transparent */
+.highlight {
+  background: transparent !important;
+}
+
 .ia-copy {
   position: absolute;
   top: 8px;
@@ -586,7 +649,7 @@ html.dark-mode .ia-copy {
 
 .ia-code-runner {
   border: 1px solid var(--ia-border);
-  border-radius: var(--ia-radius);
+  border-radius: 10px;
   overflow: hidden;
   margin: 1.2rem 0;
 }
@@ -596,7 +659,7 @@ html.dark-mode .ia-copy {
   gap: 0.5rem;
   align-items: center;
   padding: 0.5rem 0.7rem;
-  background: var(--ia-bg-soft);
+  background: transparent;
   border-bottom: 1px solid var(--ia-border);
 }
 
@@ -626,7 +689,7 @@ html.dark-mode .ia-copy {
 .ia-code-runner__output {
   padding: 0.7rem;
   border-top: 1px solid var(--ia-border);
-  background: rgba(0,0,0,0.03);
+  background: transparent;
   font-family: var(--ia-font-mono);
   white-space: pre-wrap;
 }
@@ -637,38 +700,22 @@ html.dark-mode .ia-code-runner__output { background: rgba(255,255,255,0.03); }
  * ------------ */
 .ia-widget {
   border: 1px solid var(--ia-border);
-  border-radius: var(--ia-radius);
+  border-radius: 10px;
   padding: 0.9rem;
   margin: 1.2rem 0;
-  background: var(--ia-bg-soft);
-}
-
-.ia-widget__row {
-  display: flex;
-  gap: 0.8rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.ia-widget label {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.ia-widget input[type="range"] {
-  width: 240px;
+  background: transparent;
 }
 
 /* -----------------------------
  * Details (native accordion)
  * ----------------------------- */
 details {
-  border: 1px solid var(--ia-border);
-  border-radius: var(--ia-radius);
-  padding: 0.6rem 0.8rem;
-  background: var(--ia-bg-soft);
-  margin: 1.1rem 0;
+  border: 0;
+  border-left: 3px solid var(--ia-border);
+  border-radius: 0;
+  padding: 0.2rem 0 0.2rem 0.85rem;
+  background: transparent;
+  margin: 0.85rem 0;
 }
 
 details > summary {

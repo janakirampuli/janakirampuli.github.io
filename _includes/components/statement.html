@@ -1,0 +1,15 @@
+{%- assign kind = include.kind | default: "statement" -%}
+{%- assign title = include.title | default: nil -%}
+{%- assign body = include.body | default: "" -%}
+
+<div class="ia-statement ia-statement--{{ kind | escape }}">
+  <div class="ia-statement__header">
+    <span class="ia-statement__kind">{{ kind | capitalize }}</span>
+    {%- if title -%}
+      <span class="ia-statement__title">{{ title }}</span>
+    {%- endif -%}
+  </div>
+  <div class="ia-statement__body">
+    {{ body | markdownify }}
+  </div>
+</div>

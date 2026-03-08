@@ -1,0 +1,9 @@
+{%- assign title = include.title | default: "To do" -%}
+{%- assign body = include.body | default: "" -%}
+
+<div class="ia-todo">
+  <div class="ia-todo__header">{{ title }}</div>
+  <div class="ia-todo__body">
+    {{ body | markdownify }}
+  </div>
+</div>

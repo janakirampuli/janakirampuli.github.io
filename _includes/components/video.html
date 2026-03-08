@@ -1,0 +1,26 @@
+{%- assign src = include.src | default: nil -%}
+{%- assign poster = include.poster | default: nil -%}
+{%- assign caption = include.caption | default: nil -%}
+{%- assign controls = include.controls | default: true -%}
+{%- assign autoplay = include.autoplay | default: false -%}
+{%- assign loop = include.loop | default: false -%}
+{%- assign muted = include.muted | default: false -%}
+{%- assign playsinline = include.playsinline | default: true -%}
+
+<figure class="ia-media">
+  <div class="ia-media__frame">
+    <video
+      class="ia-media__video"
+      {% if src %}src="{{ src | relative_url }}"{% endif %}
+      {% if poster %}poster="{{ poster | relative_url }}"{% endif %}
+      {% if controls %}controls{% endif %}
+      {% if autoplay %}autoplay{% endif %}
+      {% if loop %}loop{% endif %}
+      {% if muted %}muted{% endif %}
+      {% if playsinline %}playsinline{% endif %}
+    ></video>
+  </div>
+  {%- if caption -%}
+    <figcaption class="ia-media__caption">{{ caption | markdownify | strip | replace: '<p>', '' | replace: '</p>', '' }}</figcaption>
+  {%- endif -%}
+</figure>

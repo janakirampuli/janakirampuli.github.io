@@ -1,0 +1,16 @@
+{%- assign label = include.label | default: "[ref]" -%}
+{%- assign href = include.href | default: nil -%}
+{%- assign bubble = include.bubble | default: nil -%}
+
+<span class="ia-cite-wrap">
+  {%- if href -%}
+    <a class="ia-cite" href="{{ href }}" target="_blank" rel="noopener">{{ label }}</a>
+  {%- else -%}
+    <span class="ia-cite" tabindex="0">{{ label }}</span>
+  {%- endif -%}
+  {%- if bubble -%}
+    <span class="ia-cite__bubble">
+      {{ bubble | markdownify | strip | replace: '<p>', '' | replace: '</p>', '' }}
+    </span>
+  {%- endif -%}
+</span>

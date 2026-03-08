@@ -10,6 +10,6 @@ This is intentionally simple: no auto-numbering (keeps Jekyll/Liquid simple).
 {%- assign text = include.text | default: include.content -%}
 
 <span class="ia-sidenote" id="{{ id }}">
-  <a class="ia-sidenote__ref" href="#{{ id }}">[{{ label }}]</a>
-  <span class="ia-sidenote__body">{{ text | markdownify | strip | replace: '<p>', '' | replace: '</p>', '' }}</span>
+  <a class="ia-sidenote__ref" href="#{{ id }}">{{ label }}</a>
+  <span class="ia-sidenote__body"><strong class="ia-sidenote__label">{{ label }}.</strong> {{ text | markdownify | strip | replace: '<p>', '' | replace: '</p>', '' }}</span>
 </span>

@@ -1,0 +1,11 @@
+{%- assign title = include.title | default: nil -%}
+{%- assign body = include.body | default: "" -%}
+
+<div class="ia-toggles">
+  {%- if title -%}
+    <div class="ia-toggles__title">{{ title }}</div>
+  {%- endif -%}
+  <div class="ia-toggles__body">
+    {{ body | markdownify }}
+  </div>
+</div>
