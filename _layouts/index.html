@@ -2,33 +2,806 @@
 layout: default
 ---
 
-{%- assign visible_posts = site.posts | where_exp: "post", "post.published != false" -%}
+<style>
+  :root {
+    --ascii-bg: #f6f8fc;
+    --ascii-fg: #1d2a44;
+    --ascii-message: #223456;
+    --ascii-message-shadow: rgba(108, 132, 178, 0.25);
+  }
 
-{%- if visible_posts.size > 0 -%}
-  {%- if page.list_title -%}
-    <h2 class="post-list-heading">{{ page.list_title }}</h2>
-  {%- endif -%}
+  html.dark-mode {
+    --ascii-bg: #0b0f19;
+    --ascii-fg: #cdd9ff;
+    --ascii-message: #d8e2ff;
+    --ascii-message-shadow: rgba(175, 196, 255, 0.25);
+  }
 
-  <ul class="post-list">
-    {%- assign date_format = site.minima.date_format | default: "%b %-d, %Y" -%}
-    {%- assign current_year = "" -%}
-    {%- for post in visible_posts -%}
-      {%- assign post_year = post.date | date: "%Y" -%}
-      {%- if post_year != current_year -%}
-        {%- assign current_year = post_year -%}
-        </ul><h2>{{ current_year }}</h2><ul class="post-list">
-      {%- endif -%}
-      <li>
-        <span class="post-meta">{{ post.date | date: date_format }}</span>
-        <h3>
-          <a class="post-link" href="{{ post.url | relative_url }}">
-            {{ post.title | escape }}
-          </a>
-        </h3>
-        {%- if site.minima.show_excerpts -%}
-          {{ post.excerpt }}
-        {%- endif -%}
-      </li>
-    {%- endfor -%}
-  </ul>
-{%- endif -%}
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  header {
+    margin-bottom: 0 !important;
+  }
+
+  header .container {
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  header h2 {
+    margin-bottom: 0 !important;
+  }
+
+  body > .container {
+    width: 100%;
+    max-width: none;
+    min-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  #main_content {
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    height: auto;
+    margin: 0;
+    padding: 0 !important;
+    overflow: hidden;
+  }
+
+  .ascii-landing {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    margin-left: 0;
+    background: var(--ascii-bg);
+    overflow: hidden;
+  }
+
+  .ascii-scene {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    padding: clamp(6px, 1vw, 12px) clamp(8px, 1.4vw, 16px);
+    box-sizing: border-box;
+    background: var(--ascii-bg);
+    color: var(--ascii-fg);
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: clamp(8px, 1.15vw, 14px);
+    line-height: 1.12;
+    letter-spacing: 0.02em;
+    white-space: pre;
+    overflow: hidden;
+    user-select: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .ascii-message {
+    position: absolute;
+    left: 50%;
+    bottom: 4vh;
+    transform: translateX(-50%);
+    margin: 0;
+    opacity: 0;
+    color: var(--ascii-message);
+    text-shadow: 0 0 18px var(--ascii-message-shadow);
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: clamp(0.84rem, 1.8vw, 1rem);
+    letter-spacing: 0.03em;
+    transition: opacity 700ms ease;
+    display: none;
+  }
+
+  .ascii-message.is-visible {
+    opacity: 1;
+  }
+
+  .cursor {
+    display: inline-block;
+    margin-left: 0.12rem;
+    animation: blink 1s steps(1, end) infinite;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .ascii-scene {
+      font-size: clamp(7px, 1.85vw, 11px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .ascii-message {
+      bottom: max(10px, env(safe-area-inset-bottom));
+      font-size: clamp(0.74rem, 3.4vw, 0.95rem);
+      text-align: center;
+    }
+  }
+</style>
+
+<section class="ascii-landing" aria-label="ASCII animation landing scene">
+  <div id="ascii-scene" class="ascii-scene" aria-hidden="true"></div>
+  <p id="ascii-message" class="ascii-message is-visible"><span id="ascii-typed"></span><span class="cursor">▊</span></p>
+</section>
+
+<script>
+  (() => {
+    const pre = document.getElementById("ascii-scene");
+    const message = document.getElementById("ascii-message");
+    const typed = document.getElementById("ascii-typed");
+    const header = document.querySelector("header");
+
+    if (!pre || !message || !typed) return;
+
+    let width = 72;
+    let height = 26;
+    let horizon = height - 3;
+    let rocketBaseX = 42;
+    let rocketBaseY = horizon - 1;
+    let stars = [];
+    let birds = [];
+    let returnSequenceStartMs = null;
+    let landingTouchdownMs = null;
+    let returnOrigin = null;
+
+    const rocketShape = [
+      "   /^\\  ",
+      "  /_||\\ ",
+      "  |: :|  ",
+      "  |:::|  ",
+      "  |:::|  ",
+      "  |:::|  ",
+      "  |:::|  ",
+      "  |___|  ",
+      "  /_|_\\  ",
+    ];
+
+    const payloadShape = [
+      " /\\ ",
+      "|##|",
+      " \\/ ",
+    ];
+
+    const payloadLandedShape = [
+      " /\\ ",
+      "|##|",
+      "_\\/_",
+    ];
+
+    const landingBurnFrames = [
+      [" ** ", "****"],
+      ["****", " ** "],
+      [" ** ", "****"],
+    ];
+
+    const descentThrusterFrames = [" :: ", " .. ", " ** "];
+
+    const marsShape = [
+      "    _..._    ",
+      "  .:::::::.  ",
+      " .:::::::::. ",
+      " .:::::::::. ",
+      "  `:::::::'  ",
+      "    `'''`    ",
+    ];
+
+    const ignitionMs = 3800;
+    const launchMs = 5400;
+    const returnTriggerDelayMs = 220;
+    const returnDescentMs = 7600;
+    const returnLandingMs = 2400;
+    const returnLoopResetDelayMs = 5400;
+    const basketballCycleMs = 7500;
+    const middlePhrase = "hey, this is Janaki";
+    const middleTypeStartDelayMs = 900;
+    const middleTypeSpeedMs = 90;
+    const MAX_COLS = 180;
+    const MAX_ROWS = 62;
+    let prev = performance.now();
+    const start = prev;
+    let sceneStartMs = start;
+    let lastLayoutStamp = "";
+    let shootingStar = null;
+    let shootingStarDone = false;
+    const phrase = "just build things";
+    let charIndex = 0;
+    let deleting = false;
+    let nextTypeAt = start;
+    let loopingTagline = "";
+
+    function measureCharSize() {
+      const probe = document.createElement("span");
+      probe.textContent = "M";
+      probe.style.position = "absolute";
+      probe.style.visibility = "hidden";
+      probe.style.font = getComputedStyle(pre).font;
+      document.body.appendChild(probe);
+      const rect = probe.getBoundingClientRect();
+      probe.remove();
+      return {
+        w: rect.width || 8,
+        h: (rect.height || 14) * 1.12,
+      };
+    }
+
+    function refreshSceneBounds() {
+      const landing = pre.closest(".ascii-landing");
+      if (landing) {
+        const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        const topOffset = landing.getBoundingClientRect().top;
+        const availableHeight = Math.max(0, Math.floor(viewportHeight - topOffset));
+        landing.style.height = `${availableHeight}px`;
+      }
+
+      const metric = measureCharSize();
+      const compact = window.innerWidth < 900;
+      width = Math.min(MAX_COLS, Math.max(compact ? 42 : 72, Math.floor(pre.clientWidth / metric.w) - 2));
+      height = Math.min(MAX_ROWS, Math.max(compact ? 18 : 26, Math.floor(pre.clientHeight / metric.h) - 1));
+      horizon = height - 3;
+      rocketBaseX = Math.max(22, Math.min(Math.floor(width * 0.66), width - 14));
+      rocketBaseY = horizon - 1;
+
+      const starCount = Math.max(72, Math.floor(width * 0.95));
+      const starBandBottom = Math.max(4, Math.floor(horizon * 0.46));
+      stars = Array.from({ length: starCount }, () => ({
+        x: Math.floor(Math.random() * width),
+        y: Math.floor(Math.random() * starBandBottom) + 1,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.8 + Math.random() * 2.4,
+      }));
+
+      shootingStar = {
+        active: false,
+        done: shootingStarDone,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        trail: 8,
+        nextAt: 5200,
+      };
+
+      birds = [
+        { x: -10, y: Math.max(3, Math.floor(height * 0.2)), speed: 2.1, phase: 0 },
+        { x: -30, y: Math.max(5, Math.floor(height * 0.31)), speed: 1.7, phase: Math.PI / 3 },
+        { x: -52, y: Math.max(4, Math.floor(height * 0.24)), speed: 1.9, phase: Math.PI / 2 },
+      ];
+
+      lastLayoutStamp = `${pre.clientWidth}|${pre.clientHeight}|${window.devicePixelRatio}|${getComputedStyle(pre).fontSize}`;
+    }
+
+    function refreshIfLayoutChanged() {
+      const stamp = `${pre.clientWidth}|${pre.clientHeight}|${window.devicePixelRatio}|${getComputedStyle(pre).fontSize}`;
+      if (stamp !== lastLayoutStamp) refreshSceneBounds();
+    }
+
+    function resetSceneCycle(now) {
+      sceneStartMs = now;
+      returnSequenceStartMs = null;
+      landingTouchdownMs = null;
+      returnOrigin = null;
+      shootingStarDone = false;
+
+      if (shootingStar) {
+        shootingStar.active = false;
+        shootingStar.done = false;
+        shootingStar.x = 0;
+        shootingStar.y = 0;
+        shootingStar.vx = 0;
+        shootingStar.vy = 0;
+        shootingStar.trail = 8;
+        shootingStar.nextAt = 5200;
+      }
+    }
+
+    function makeGrid() {
+      return Array.from({ length: height }, () => Array(width).fill(" "));
+    }
+
+    function put(grid, x, y, char) {
+      if (x >= 0 && x < width && y >= 0 && y < height) grid[y][x] = char;
+    }
+
+    function drawText(grid, x, y, text) {
+      for (let i = 0; i < text.length; i += 1) put(grid, x + i, y, text[i]);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function lerp(from, to, t) {
+      return from + (to - from) * t;
+    }
+
+    function smoothstep(t) {
+      const v = clamp(t, 0, 1);
+      return v * v * (3 - 2 * v);
+    }
+
+    function easeOutCubic(t) {
+      const v = clamp(t, 0, 1);
+      return 1 - (1 - v) ** 3;
+    }
+
+    function basketballPhase(elapsedMs) {
+      const t = elapsedMs % basketballCycleMs;
+
+      if (t < 2400) return { phase: "dribble", t: t / 2400 };
+      if (t < 3500) return { phase: "defend", t: (t - 2400) / 1100 };
+      if (t < 4400) return { phase: "jump", t: (t - 3500) / 900 };
+      if (t < 5900) return { phase: "arc", t: (t - 4400) / 1500 };
+      if (t < 6600) return { phase: "swish", t: (t - 5900) / 700 };
+      return { phase: "net", t: (t - 6600) / 900 };
+    }
+
+    function drawBasketballCourt(grid, elapsedMs, seconds) {
+      const courtX = 1;
+      const courtRightLimit = Math.max(16, rocketBaseX - 10);
+      const desiredCourtWidth = Math.floor(width * 0.42);
+      const courtWidth = clamp(Math.min(desiredCourtWidth, courtRightLimit - courtX), 16, 34);
+      const courtRight = courtX + courtWidth - 1;
+
+      const poleX = courtRight - 1;
+      const boardX = poleX - 1;
+      const rimY = horizon - 5;
+      const rimX = poleX - 4;
+      const rimCenterX = rimX + 1;
+
+      const offenseBaseX = courtX + Math.max(1, Math.floor(courtWidth * 0.22));
+      const approachX = clamp(courtX + Math.floor(courtWidth * 0.44), courtX + 5, poleX - 9);
+      const feetY = horizon - 1;
+
+      for (let x = courtX; x <= courtRight; x += 1) put(grid, x, horizon, "=");
+      put(grid, courtX, horizon - 1, "_");
+      put(grid, courtRight, horizon - 1, "_");
+
+      for (let y = horizon - 6; y <= horizon - 1; y += 1) put(grid, poleX, y, "|");
+      for (let y = rimY - 1; y <= rimY + 1; y += 1) put(grid, boardX, y, "|");
+      drawText(grid, rimX, rimY, "===");
+
+      let netFrame = 0;
+      let offenseX = offenseBaseX;
+      let offenseFeetY = feetY;
+      let defenseX = offenseX + 4;
+      let ballX = offenseX + 2;
+      let ballY = offenseFeetY - 2;
+      let ballVisible = true;
+
+      const step = basketballPhase(elapsedMs);
+
+      if (step.phase === "dribble") {
+        offenseX = offenseBaseX + Math.round(smoothstep(step.t) * 4);
+        defenseX = offenseX + 4 + (Math.sin(seconds * 6) > 0 ? 1 : 0);
+
+        const bounce = Math.abs(Math.sin(step.t * Math.PI * 2.6));
+        const handY = offenseFeetY - 2;
+        ballY = Math.round(lerp(handY, horizon, bounce));
+        ballX = offenseX + 2;
+      } else if (step.phase === "defend") {
+        offenseX = approachX + (Math.sin(seconds * 3.2) > 0 ? 1 : 0);
+        defenseX = offenseX + 3 + (Math.sin(seconds * 9) > 0 ? 1 : -1);
+        ballX = offenseX + 2;
+        ballY = offenseFeetY - 2 + (Math.sin(seconds * 8) > 0 ? 0 : 1);
+      } else if (step.phase === "jump") {
+        const lift = Math.sin(step.t * Math.PI) * 2.2;
+        offenseFeetY = feetY - Math.round(lift);
+        offenseX = approachX + Math.round(step.t * 2);
+        defenseX = offenseX + 3 + (Math.sin(seconds * 8) > 0 ? 1 : 0);
+        ballX = offenseX + 2;
+        ballY = offenseFeetY - 3;
+      } else if (step.phase === "arc") {
+        const shotT = smoothstep(step.t);
+        offenseX = approachX + 2;
+        defenseX = offenseX + 3 + (Math.sin(seconds * 7) > 0 ? 1 : 0);
+
+        const startX = offenseX + 2;
+        const startY = feetY - 4;
+        const apexX = Math.round((startX + rimCenterX) / 2);
+        const apexY = Math.min(startY, rimY) - 4;
+        const endX = rimCenterX;
+        const endY = rimY;
+        offenseFeetY = feetY;
+
+        ballX = Math.round(
+          ((1 - shotT) ** 2) * startX
+          + 2 * (1 - shotT) * shotT * apexX
+          + (shotT ** 2) * endX,
+        );
+        ballY = Math.round(
+          ((1 - shotT) ** 2) * startY
+          + 2 * (1 - shotT) * shotT * apexY
+          + (shotT ** 2) * endY,
+        );
+      } else if (step.phase === "swish") {
+        offenseX = approachX + 2;
+        defenseX = offenseX + 3 + (Math.sin(seconds * 6) > 0 ? 1 : 0);
+        ballX = rimCenterX;
+        ballY = Math.round(lerp(rimY, rimY + 2, smoothstep(step.t)));
+        netFrame = step.t > 0.4 ? 1 : 0;
+      } else {
+        offenseX = approachX + 2;
+        defenseX = offenseX + 3 + (Math.sin(seconds * 6) > 0 ? 1 : 0);
+        ballVisible = false;
+        netFrame = step.t < 0.45 ? 1 : 2;
+      }
+
+      offenseX = clamp(offenseX, courtX + 1, poleX - 11);
+      defenseX = clamp(defenseX, offenseX + 2, poleX - 7);
+
+      const offenseTorso = step.phase === "jump" || step.phase === "arc" ? "/|_" : "/|\\";
+      const standingLegs = "/ " + "\\";
+      const offenseLegs = step.phase === "jump" ? " | " : standingLegs;
+      drawText(grid, offenseX, offenseFeetY - 2, " o ");
+      drawText(grid, offenseX, offenseFeetY - 1, offenseTorso);
+      drawText(grid, offenseX, offenseFeetY, offenseLegs);
+
+      drawText(grid, defenseX, feetY - 2, " o ");
+      drawText(grid, defenseX, feetY - 1, "\\|/");
+      drawText(grid, defenseX, feetY, standingLegs);
+
+      if (netFrame === 0) {
+        drawText(grid, rimX, rimY + 1, "\\|/");
+        put(grid, rimCenterX, rimY + 2, "v");
+      } else if (netFrame === 1) {
+        drawText(grid, rimX, rimY + 1, "/|\\");
+        put(grid, rimCenterX - 1, rimY + 2, "v");
+      } else {
+        drawText(grid, rimX, rimY + 1, "\\|/");
+        put(grid, rimCenterX + 1, rimY + 2, "v");
+      }
+
+      if (ballVisible) put(grid, ballX, ballY, "o");
+    }
+
+    function drawMiddleIntro(grid, globalElapsedMs) {
+      const courtX = 1;
+      const courtRightLimit = Math.max(16, rocketBaseX - 10);
+      const desiredCourtWidth = Math.floor(width * 0.42);
+      const courtWidth = clamp(Math.min(desiredCourtWidth, courtRightLimit - courtX), 16, 34);
+      const courtRight = courtX + courtWidth - 1;
+
+      const minX = courtRight + 3;
+      const maxX = Math.max(minX, rocketBaseX - middlePhrase.length - 8);
+      const textX = clamp(Math.floor(width * 0.42), minX, maxX);
+      const textY = clamp(horizon - 10, 2, horizon - 4);
+
+      const typingElapsed = globalElapsedMs - middleTypeStartDelayMs;
+      const typedCount = typingElapsed <= 0
+        ? 0
+        : Math.min(middlePhrase.length, Math.floor(typingElapsed / middleTypeSpeedMs) + 1);
+
+      const visibleText = middlePhrase.slice(0, typedCount);
+      const cursorOn = Math.floor(globalElapsedMs / 460) % 2 === 0;
+      const cursor = cursorOn ? "|" : " ";
+      drawText(grid, textX, textY, `${visibleText}${cursor}`);
+    }
+
+    function drawLoopingTagline(grid, globalElapsedMs) {
+      const courtX = 1;
+      const courtRightLimit = Math.max(16, rocketBaseX - 10);
+      const desiredCourtWidth = Math.floor(width * 0.42);
+      const courtWidth = clamp(Math.min(desiredCourtWidth, courtRightLimit - courtX), 16, 34);
+      const courtRight = courtX + courtWidth - 1;
+
+      const minX = courtRight + 3;
+      const maxX = Math.max(minX, rocketBaseX - phrase.length - 8);
+      const textX = clamp(Math.floor(width * 0.42), minX, maxX);
+      const taglineY = clamp(horizon - 1, 3, horizon - 1);
+
+      const cursorOn = Math.floor(globalElapsedMs / 480) % 2 === 0;
+      const cursor = cursorOn ? "|" : " ";
+      drawText(grid, textX, taglineY, `${loopingTagline}${cursor}`);
+    }
+
+    function drawMars(grid) {
+      const mx = Math.max(1, width - 18);
+      const my = 1;
+      marsShape.forEach((line, row) => drawText(grid, mx, my + row, line));
+    }
+
+    function drawStars(grid, seconds) {
+      stars.forEach((star) => {
+        const pulse = Math.sin(seconds * star.speed + star.phase);
+        const char = pulse > 0.66 ? "✶" : pulse > 0.36 ? "✦" : pulse > -0.05 ? "*" : ".";
+        put(grid, star.x, star.y, char);
+      });
+    }
+
+    function drawShootingStar(grid, elapsedMs, dt) {
+      if (!shootingStar) return;
+      if (shootingStar.done) return;
+
+      if (!shootingStar.active && elapsedMs >= shootingStar.nextAt) {
+        shootingStar.active = true;
+        shootingStar.x = -12;
+        shootingStar.y = Math.max(2, Math.floor(horizon * 0.46));
+        shootingStar.vx = 7.8;
+        shootingStar.vy = -0.95;
+        shootingStar.trail = 8;
+      }
+
+      if (!shootingStar.active) return;
+
+      const delta = dt / 1000;
+      shootingStar.x += shootingStar.vx * delta;
+      shootingStar.y += shootingStar.vy * delta;
+
+      const sx = Math.round(shootingStar.x);
+      const sy = Math.round(shootingStar.y);
+
+      put(grid, sx, sy, "✹");
+
+      for (let i = 1; i <= shootingStar.trail; i += 1) {
+        const tx = sx - i;
+        const ty = sy + Math.round(i * 0.42);
+        const char = i <= 2 ? "✦" : i <= 4 ? "*" : ".";
+        put(grid, tx, ty, char);
+      }
+
+      if (sx > width + shootingStar.trail + 12 || sy < 1) {
+        shootingStar.active = false;
+        shootingStar.done = true;
+        shootingStarDone = true;
+      }
+    }
+
+    function drawBirds(grid, seconds, dt) {
+      birds.forEach((bird) => {
+        bird.x += bird.speed * (dt / 1000);
+        if (bird.x > width + 5) bird.x = -9 - Math.random() * 20;
+
+        const flap = Math.sin(seconds * 5 + bird.phase) > 0;
+        const shape = flap ? "\\v/" : "~v~";
+        drawText(grid, Math.round(bird.x), bird.y, shape);
+      });
+    }
+
+    function drawGround(grid) {
+      drawText(grid, 0, horizon, "_".repeat(width));
+      drawText(grid, 0, horizon + 1, "~".repeat(width));
+      drawText(grid, 0, horizon + 2, ".".repeat(width));
+      drawText(grid, rocketBaseX - 1, horizon + 1, "|||||||||");
+    }
+
+    function drawKid(grid, seconds, rocketY, returnState) {
+      const baseX = Math.max(2, rocketBaseX - 11);
+      const ky = horizon - 3;
+      let kx = baseX;
+      let arm = rocketY > 3 && Math.sin(seconds * 4) > 0 ? " /|_" : " /|\\";
+      let legs = " / \\";
+      let spark = rocketY > 3 ? "  *" : "   ";
+
+      if (returnState.visible) {
+        spark = "   ";
+
+        if (returnState.phase === "appear" || returnState.phase === "descent" || returnState.phase === "landing") {
+          arm = Math.sin(seconds * 2.2) > 0 ? " _|\\" : " /|\\";
+        }
+
+        if (returnState.phase === "landed") {
+          const landedFor = returnState.landedFor;
+          arm = landedFor > 700 ? " _|>" : " _|\\";
+
+          if (landedFor > 1600) {
+            const runT = smoothstep((landedFor - 1600) / 2600);
+            const targetX = clamp(returnState.x - 9, 1, width - 6);
+            kx = Math.round(lerp(baseX, targetX, runT));
+            legs = Math.sin(seconds * 8.5) > 0 ? " _/\\" : " /_\\";
+          }
+        }
+      }
+
+      drawText(grid, kx, ky, "  o  ");
+      drawText(grid, kx, ky + 1, arm);
+      drawText(grid, kx, ky + 2, legs);
+      drawText(grid, kx + 5, ky + 1, spark);
+    }
+
+    function drawRocket(grid, elapsedMs, rocketX, rocketY) {
+      const topY = Math.round(rocketY - rocketShape.length + 1);
+      const drawX = Math.round(rocketX);
+      rocketShape.forEach((line, i) => drawText(grid, drawX, topY + i, line));
+
+      const ignited = elapsedMs >= ignitionMs;
+      if (!ignited) return;
+
+      const launch = elapsedMs >= launchMs;
+      const flameY = Math.round(rocketY + 1);
+      const flame = launch
+        ? (Math.sin(elapsedMs * 0.02) > 0 ? "   \\/    " : "   /\\    ")
+        : (Math.sin(elapsedMs * 0.03) > 0 ? "   !!    " : "   !!    ");
+      drawText(grid, drawX, flameY, flame);
+    }
+
+    function computeReturnState(elapsedMs, seconds) {
+      const shapeH = payloadShape.length;
+      const shapeW = payloadShape[0].length;
+      const landingX = clamp(rocketBaseX + Math.max(12, Math.floor(width * 0.17)), 2, width - shapeW - 2);
+      const landedY = horizon - shapeH;
+
+      if (returnSequenceStartMs === null || elapsedMs < returnSequenceStartMs || !returnOrigin) {
+        return { visible: false, phase: "hidden", x: landingX, y: landedY, landedFor: 0 };
+      }
+
+      const flightElapsed = elapsedMs - returnSequenceStartMs;
+      const startX = clamp(returnOrigin.x, 2, width - shapeW - 2);
+      const startY = clamp(returnOrigin.y, 1, horizon - shapeH - 8);
+      const burnStartY = Math.max(startY + 3, landedY - 7);
+
+      if (flightElapsed < returnDescentMs) {
+        const t = clamp(flightElapsed / returnDescentMs, 0, 1);
+        const path = smoothstep(t);
+        const baseX = lerp(startX, landingX, path);
+        const wobble = Math.sin(seconds * 1.45 + t * Math.PI * 5) * (1.7 - t * 1.1);
+        const y = lerp(startY, burnStartY, path);
+        return {
+          visible: true,
+          phase: "descent",
+          x: Math.round(baseX + wobble),
+          y: Math.round(y),
+          landedFor: 0,
+        };
+      }
+
+      if (flightElapsed < returnDescentMs + returnLandingMs) {
+        const lt = clamp((flightElapsed - returnDescentMs) / returnLandingMs, 0, 1);
+        const path = easeOutCubic(lt);
+        const wobble = Math.sin(seconds * 2 + lt * 4) * 0.5 * (1 - path);
+        const y = lerp(burnStartY, landedY, path);
+        return {
+          visible: true,
+          phase: "landing",
+          x: Math.round(landingX + wobble),
+          y: Math.round(y),
+          landedFor: 0,
+        };
+      }
+
+      if (landingTouchdownMs === null) landingTouchdownMs = elapsedMs;
+
+      return {
+        visible: true,
+        phase: "landed",
+        x: landingX,
+        y: landedY,
+        landedFor: elapsedMs - landingTouchdownMs,
+      };
+    }
+
+    function drawReturnCraft(grid, elapsedMs, seconds, returnState) {
+      if (!returnState.visible) return;
+
+      const shape = returnState.phase === "landing" || returnState.phase === "landed"
+        ? payloadLandedShape
+        : payloadShape;
+
+      shape.forEach((line, row) => drawText(grid, returnState.x, returnState.y + row, line));
+
+      const craftBottomY = returnState.y + shape.length;
+
+      if (returnState.phase === "descent" && Math.sin(elapsedMs * 0.014) > 0.5) {
+        const burst = descentThrusterFrames[Math.floor(elapsedMs / 150) % descentThrusterFrames.length];
+        drawText(grid, returnState.x, craftBottomY, burst);
+      }
+
+      if (returnState.phase === "landing") {
+        const flameFrame = landingBurnFrames[Math.floor(elapsedMs / 170) % landingBurnFrames.length];
+        drawText(grid, returnState.x, craftBottomY, flameFrame[0]);
+        drawText(grid, returnState.x, craftBottomY + 1, flameFrame[1]);
+      }
+
+      if (returnState.phase === "landed" && returnState.landedFor > 1000) {
+        const glowChar = Math.sin(seconds * 2.6) > 0 ? "✶" : "✦";
+        const glowX = returnState.x + Math.floor(shape[0].length / 2);
+        put(grid, glowX, returnState.y - 1, glowChar);
+      }
+    }
+
+    function frame(now) {
+      refreshIfLayoutChanged();
+
+      const globalElapsedMs = now - start;
+
+      if (now >= nextTypeAt) {
+        if (!deleting) {
+          charIndex += 1;
+          if (charIndex >= phrase.length) {
+            charIndex = phrase.length;
+            deleting = true;
+            nextTypeAt = now + 1200;
+          } else {
+            nextTypeAt = now + 80 + Math.random() * 55;
+          }
+        } else {
+          charIndex -= 1;
+          if (charIndex <= 0) {
+            charIndex = 0;
+            deleting = false;
+            nextTypeAt = now + 360;
+          } else {
+            nextTypeAt = now + 40 + Math.random() * 35;
+          }
+        }
+
+        loopingTagline = phrase.slice(0, charIndex);
+      }
+
+      const sceneElapsedMs = now - sceneStartMs;
+      const seconds = sceneElapsedMs / 1000;
+      const dt = now - prev;
+      prev = now;
+
+      const grid = makeGrid();
+
+      let rocketOffset = 0;
+      let rocketXOffset = 0;
+      if (sceneElapsedMs > launchMs) {
+        const launchElapsed = sceneElapsedMs - launchMs;
+        rocketOffset = Math.min(height + 4, launchElapsed / 620);
+        rocketXOffset = Math.min(Math.max(0, width - rocketBaseX - 10), launchElapsed / 500);
+      }
+
+      const rocketY = rocketBaseY - rocketOffset;
+      const rocketX = rocketBaseX + rocketXOffset;
+
+      if (returnSequenceStartMs === null && rocketOffset >= Math.max(9, Math.floor(height * 0.36))) {
+        returnSequenceStartMs = sceneElapsedMs + returnTriggerDelayMs;
+        landingTouchdownMs = null;
+        const rocketWidth = rocketShape[0].length;
+        returnOrigin = {
+          x: Math.round(clamp(rocketX + Math.floor((rocketWidth - payloadShape[0].length) / 2), 2, width - payloadShape[0].length - 2)),
+          y: Math.round(clamp(rocketY + 1, 1, horizon - payloadShape.length - 2)),
+        };
+      }
+
+      const returnState = computeReturnState(sceneElapsedMs, seconds);
+
+      if (returnState.phase === "landed" && returnState.landedFor > returnLoopResetDelayMs) {
+        resetSceneCycle(now);
+        requestAnimationFrame(frame);
+        return;
+      }
+
+      drawStars(grid, seconds);
+      drawShootingStar(grid, sceneElapsedMs, dt);
+      drawMars(grid);
+      drawBirds(grid, seconds, dt);
+      drawGround(grid);
+      drawBasketballCourt(grid, sceneElapsedMs, seconds);
+      drawMiddleIntro(grid, globalElapsedMs);
+      drawLoopingTagline(grid, globalElapsedMs);
+      drawRocket(grid, sceneElapsedMs, rocketX, rocketY);
+      drawReturnCraft(grid, sceneElapsedMs, seconds, returnState);
+      drawKid(grid, seconds, rocketY, returnState);
+
+      pre.textContent = grid.map((row) => row.join("")).join("\n");
+
+      requestAnimationFrame(frame);
+    }
+
+    refreshSceneBounds();
+    window.addEventListener("resize", refreshSceneBounds);
+    window.visualViewport?.addEventListener("resize", refreshSceneBounds);
+    window.visualViewport?.addEventListener("scroll", refreshSceneBounds);
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(refreshSceneBounds);
+      observer.observe(pre);
+      if (header) observer.observe(header);
+    }
+    requestAnimationFrame(frame);
+  })();
+</script>
