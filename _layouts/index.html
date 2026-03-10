@@ -8,6 +8,9 @@ layout: default
     --ascii-fg: #1d2a44;
     --ascii-message: #223456;
     --ascii-message-shadow: rgba(108, 132, 178, 0.25);
+    --ascii-sky-top: #eef4ff;
+    --ascii-sky-mid: #f6f8fc;
+    --ascii-ground-tint: #e8eefc;
   }
 
   html.dark-mode {
@@ -15,6 +18,9 @@ layout: default
     --ascii-fg: #cdd9ff;
     --ascii-message: #d8e2ff;
     --ascii-message-shadow: rgba(175, 196, 255, 0.25);
+    --ascii-sky-top: #10182b;
+    --ascii-sky-mid: #0b0f19;
+    --ascii-ground-tint: #060914;
   }
 
   html,
@@ -71,7 +77,8 @@ layout: default
     height: 100%;
     padding: clamp(6px, 1vw, 12px) clamp(8px, 1.4vw, 16px);
     box-sizing: border-box;
-    background: var(--ascii-bg);
+    background:
+      radial-gradient(120% 95% at 50% -10%, var(--ascii-sky-top) 0%, var(--ascii-sky-mid) 56%, var(--ascii-ground-tint) 100%);
     color: var(--ascii-fg);
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: clamp(8px, 1.15vw, 14px);
@@ -118,9 +125,22 @@ layout: default
   }
 
   @media (max-width: 900px) {
+    .ascii-landing {
+      --ascii-sky-top: #e4efff;
+      --ascii-sky-mid: #eff4ff;
+      --ascii-ground-tint: #dde8fb;
+    }
+
+    html.dark-mode .ascii-landing {
+      --ascii-sky-top: #13203a;
+      --ascii-sky-mid: #0d1526;
+      --ascii-ground-tint: #060a13;
+    }
+
     .ascii-scene {
-      font-size: clamp(7px, 1.85vw, 11px);
-      line-height: 1.08;
+      padding: clamp(4px, 1.6vw, 10px) clamp(6px, 2vw, 12px);
+      font-size: clamp(6px, 1.65vw, 10px);
+      line-height: 1.03;
       letter-spacing: 0;
     }
 
@@ -128,6 +148,7 @@ layout: default
       bottom: max(10px, env(safe-area-inset-bottom));
       font-size: clamp(0.74rem, 3.4vw, 0.95rem);
       text-align: center;
+      width: min(92vw, 560px);
     }
   }
 </style>
@@ -148,7 +169,8 @@ layout: default
 
     let width = 72;
     let height = 26;
-    let horizon = height - 3;
+    let horizon = height - 5;
+    let isCompact = false;
     let rocketBaseX = 42;
     let rocketBaseY = horizon - 1;
     let stars = [];
@@ -198,8 +220,14 @@ layout: default
       "    `'''`    ",
     ];
 
-    const ignitionMs = 3800;
-    const launchMs = 5400;
+    const marsShapeCompact = [
+      "  .--.  ",
+      " (::::) ",
+      "  `--'  ",
+    ];
+
+    const ignitionMs = 2000;
+    const launchMs = 1000;
     const returnTriggerDelayMs = 220;
     const returnDescentMs = 7600;
     const returnLandingMs = 2400;
@@ -210,13 +238,14 @@ layout: default
     const middleTypeSpeedMs = 90;
     const MAX_COLS = 180;
     const MAX_ROWS = 62;
+    const MAX_ROWS_COMPACT = 180;
     let prev = performance.now();
     const start = prev;
     let sceneStartMs = start;
     let lastLayoutStamp = "";
     let shootingStar = null;
     let shootingStarDone = false;
-    const phrase = "just build things";
+    const phrase = "you can just do things";
     let charIndex = 0;
     let deleting = false;
     let nextTypeAt = start;
@@ -247,18 +276,24 @@ layout: default
       }
 
       const metric = measureCharSize();
-      const compact = window.innerWidth < 900;
-      width = Math.min(MAX_COLS, Math.max(compact ? 42 : 72, Math.floor(pre.clientWidth / metric.w) - 2));
-      height = Math.min(MAX_ROWS, Math.max(compact ? 18 : 26, Math.floor(pre.clientHeight / metric.h) - 1));
-      horizon = height - 3;
-      rocketBaseX = Math.max(22, Math.min(Math.floor(width * 0.66), width - 14));
+      isCompact = window.innerWidth < 900;
+      width = Math.min(MAX_COLS, Math.max(isCompact ? 40 : 72, Math.floor(pre.clientWidth / metric.w) - 2));
+
+      const maxRows = isCompact ? MAX_ROWS_COMPACT : MAX_ROWS;
+      const minRows = isCompact ? 20 : 26;
+      const rowBuffer = isCompact ? 0 : 1;
+      height = Math.min(maxRows, Math.max(minRows, Math.floor(pre.clientHeight / metric.h) - rowBuffer));
+
+      horizon = height - (isCompact ? 6 : 5);
+      rocketBaseX = Math.max(22, Math.min(Math.floor(width * (isCompact ? 0.62 : 0.66)), width - 14));
       rocketBaseY = horizon - 1;
 
-      const starCount = Math.max(72, Math.floor(width * 0.95));
-      const starBandBottom = Math.max(4, Math.floor(horizon * 0.46));
+      const starCount = Math.max(isCompact ? 54 : 72, Math.floor(width * (isCompact ? 1.18 : 0.95)));
+      const starBandBottom = Math.max(4, Math.floor(horizon * (isCompact ? 0.46 : 0.46)));
+      const starTopOffset = isCompact ? 0 : 1;
       stars = Array.from({ length: starCount }, () => ({
         x: Math.floor(Math.random() * width),
-        y: Math.floor(Math.random() * starBandBottom) + 1,
+        y: Math.floor(Math.random() * starBandBottom) + starTopOffset,
         phase: Math.random() * Math.PI * 2,
         speed: 0.8 + Math.random() * 2.4,
       }));
@@ -274,11 +309,16 @@ layout: default
         nextAt: 5200,
       };
 
-      birds = [
-        { x: -10, y: Math.max(3, Math.floor(height * 0.2)), speed: 2.1, phase: 0 },
-        { x: -30, y: Math.max(5, Math.floor(height * 0.31)), speed: 1.7, phase: Math.PI / 3 },
-        { x: -52, y: Math.max(4, Math.floor(height * 0.24)), speed: 1.9, phase: Math.PI / 2 },
-      ];
+      birds = isCompact
+        ? [
+          { x: -10, y: Math.max(3, Math.floor(height * 0.18)), speed: 1.9, phase: 0 },
+          { x: -38, y: Math.max(4, Math.floor(height * 0.28)), speed: 1.5, phase: Math.PI / 2 },
+        ]
+        : [
+          { x: -10, y: Math.max(3, Math.floor(height * 0.2)), speed: 2.1, phase: 0 },
+          { x: -30, y: Math.max(5, Math.floor(height * 0.31)), speed: 1.7, phase: Math.PI / 3 },
+          { x: -52, y: Math.max(4, Math.floor(height * 0.24)), speed: 1.9, phase: Math.PI / 2 },
+        ];
 
       lastLayoutStamp = `${pre.clientWidth}|${pre.clientHeight}|${window.devicePixelRatio}|${getComputedStyle(pre).fontSize}`;
     }
@@ -476,8 +516,8 @@ layout: default
 
       const minX = courtRight + 3;
       const maxX = Math.max(minX, rocketBaseX - middlePhrase.length - 8);
-      const textX = clamp(Math.floor(width * 0.42), minX, maxX);
-      const textY = clamp(horizon - 10, 2, horizon - 4);
+      const textX = clamp(Math.floor(width * (isCompact ? 0.45 : 0.42)), minX, maxX);
+      const textY = clamp(horizon - (isCompact ? 25 : 10), 2, horizon - (isCompact ? 6 : 4));
 
       const typingElapsed = globalElapsedMs - middleTypeStartDelayMs;
       const typedCount = typingElapsed <= 0
@@ -499,8 +539,8 @@ layout: default
 
       const minX = courtRight + 3;
       const maxX = Math.max(minX, rocketBaseX - phrase.length - 8);
-      const textX = clamp(Math.floor(width * 0.42), minX, maxX);
-      const taglineY = clamp(horizon - 1, 3, horizon - 1);
+      const textX = clamp(Math.floor(width * (isCompact ? 0.45 : 0.42)), minX, maxX);
+      const taglineY = clamp(horizon + (isCompact ? 5 : 4), 0, height - 1);
 
       const cursorOn = Math.floor(globalElapsedMs / 480) % 2 === 0;
       const cursor = cursorOn ? "|" : " ";
@@ -508,6 +548,13 @@ layout: default
     }
 
     function drawMars(grid) {
+      if (isCompact) {
+        const mx = clamp(Math.floor(width * 0.58), 1, width - marsShapeCompact[0].length - 1);
+        const my = 1;
+        marsShapeCompact.forEach((line, row) => drawText(grid, mx, my + row, line));
+        return;
+      }
+
       const mx = Math.max(1, width - 18);
       const my = 1;
       marsShape.forEach((line, row) => drawText(grid, mx, my + row, line));
@@ -571,10 +618,13 @@ layout: default
     }
 
     function drawGround(grid) {
-      drawText(grid, 0, horizon, "_".repeat(width));
-      drawText(grid, 0, horizon + 1, "~".repeat(width));
-      drawText(grid, 0, horizon + 2, ".".repeat(width));
-      drawText(grid, rocketBaseX - 1, horizon + 1, "|||||||||");
+      const groundLayers = ["_", "~", "."];
+      groundLayers.forEach((char, index) => {
+        const y = horizon + index;
+        if (y < height) drawText(grid, 0, y, char.repeat(width));
+      });
+      const padY = Math.min(horizon + 1, height - 1);
+      drawText(grid, rocketBaseX - 1, padY, "|||||||||");
     }
 
     function drawKid(grid, seconds, rocketY, returnState) {
@@ -751,8 +801,10 @@ layout: default
       let rocketXOffset = 0;
       if (sceneElapsedMs > launchMs) {
         const launchElapsed = sceneElapsedMs - launchMs;
-        rocketOffset = Math.min(height + 4, launchElapsed / 620);
-        rocketXOffset = Math.min(Math.max(0, width - rocketBaseX - 10), launchElapsed / 500);
+        const verticalLaunchDivisor = isCompact ? 360 : 540;
+        const horizontalLaunchDivisor = isCompact ? 380 : 470;
+        rocketOffset = Math.min(height + 4, launchElapsed / verticalLaunchDivisor);
+        rocketXOffset = Math.min(Math.max(0, width - rocketBaseX - 10), launchElapsed / horizontalLaunchDivisor);
       }
 
       const rocketY = rocketBaseY - rocketOffset;
