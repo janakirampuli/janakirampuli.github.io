@@ -9,8 +9,8 @@
   --ia-max-width: 1040px;
 
   /* margin-note layout tuning (desktop) */
-  --ia-margin-col: 220px;
-  --ia-sidenote-width: 200px;
+  --ia-margin-col: 250px;
+  --ia-sidenote-width: 230px;
   --ia-max-width-wide: 1400px;
   --ia-text: #0b0b0c;
   --ia-muted: rgba(0, 0, 0, 0.72);
@@ -373,11 +373,13 @@ html.dark-mode .ia-lightbox__close {
 .ia-sidenote__body {
   display: inline-block;
   margin-left: 0.2rem;
-  padding: 0.3rem 0.5rem;
-  border: 1px dashed var(--ia-border);
+  padding: 0.45rem 0.7rem;
+  border: 0;
   border-radius: 10px;
   background: var(--ia-bg-soft);
   color: var(--ia-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .ia-sidenote__label {
@@ -621,6 +623,13 @@ html:not(.dark-mode) .highlight pre {
 pre {
   background: var(--ia-code-bg);
   border-radius: 10px;
+}
+
+/* In dark mode, keep code blocks clearly framed */
+html.dark-mode pre,
+html.dark-mode pre.highlight,
+html.dark-mode .highlight pre {
+  border: 1px solid rgba(255, 255, 255, 0.32);
 }
 
 /* If Rouge wraps as .highlight > pre, make wrapper transparent */

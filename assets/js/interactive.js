@@ -207,7 +207,9 @@ async function enhanceMermaid(root = document) {
   for (const code of blocks) {
     const pre = code.closest('pre');
     const src = code.textContent;
-    const container = el('div', { class: 'ia-widget' });
+    // const container = el('div', { class: 'ia-widget' });
+    const container = el('div', { class: 'ia-widget ia-widget--mermaid' });
+     pre.replaceWith(container);
     pre.replaceWith(container);
     const id = `mermaid-${idx++}`;
     try {

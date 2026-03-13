@@ -236,9 +236,9 @@ layout: default
     const middlePhrase = "hey, this is Janaki";
     const middleTypeStartDelayMs = 900;
     const middleTypeSpeedMs = 90;
-    const MAX_COLS = 180;
-    const MAX_ROWS = 62;
-    const MAX_ROWS_COMPACT = 180;
+    const MAX_COLS = 320;
+    const MAX_ROWS = 120;
+    const MAX_ROWS_COMPACT = 220;
     let prev = performance.now();
     const start = prev;
     let sceneStartMs = start;
@@ -250,6 +250,15 @@ layout: default
     let deleting = false;
     let nextTypeAt = start;
     let loopingTagline = "";
+
+    function getEffectiveViewportHeight() {
+      const viewport = window.visualViewport;
+      if (viewport && Math.abs((viewport.scale || 1) - 1) > 0.001) {
+        return viewport.height;
+      }
+
+      return window.innerHeight;
+    }
 
     function measureCharSize() {
       const probe = document.createElement("span");
@@ -269,9 +278,9 @@ layout: default
     function refreshSceneBounds() {
       const landing = pre.closest(".ascii-landing");
       if (landing) {
-        const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        const viewportHeight = getEffectiveViewportHeight();
         const topOffset = landing.getBoundingClientRect().top;
-        const availableHeight = Math.max(0, Math.floor(viewportHeight - topOffset));
+        const availableHeight = Math.max(0, Math.round(viewportHeight - topOffset));
         landing.style.height = `${availableHeight}px`;
       }
 
@@ -320,11 +329,13 @@ layout: default
           { x: -52, y: Math.max(4, Math.floor(height * 0.24)), speed: 1.9, phase: Math.PI / 2 },
         ];
 
-      lastLayoutStamp = `${pre.clientWidth}|${pre.clientHeight}|${window.devicePixelRatio}|${getComputedStyle(pre).fontSize}`;
+      const viewportScale = window.visualViewport ? window.visualViewport.scale || 1 : 1;
+      lastLayoutStamp = `${pre.clientWidth}|${pre.clientHeight}|${window.innerWidth}|${window.innerHeight}|${window.devicePixelRatio}|${viewportScale}|${getComputedStyle(pre).fontSize}`;
     }
 
     function refreshIfLayoutChanged() {
-      const stamp = `${pre.clientWidth}|${pre.clientHeight}|${window.devicePixelRatio}|${getComputedStyle(pre).fontSize}`;
+      const viewportScale = window.visualViewport ? window.visualViewport.scale || 1 : 1;
+      const stamp = `${pre.clientWidth}|${pre.clientHeight}|${window.innerWidth}|${window.innerHeight}|${window.devicePixelRatio}|${viewportScale}|${getComputedStyle(pre).fontSize}`;
       if (stamp !== lastLayoutStamp) refreshSceneBounds();
     }
 
