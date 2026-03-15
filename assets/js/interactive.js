@@ -583,3 +583,32 @@ function enhanceXScrolly(root = document) {
 }
 
 enhanceXScrolly();
+
+/* -----------------
+ * Back to top button
+ * ----------------- */
+function enhanceBackToTop() {
+  const btn = document.getElementById('back-to-top');
+  if (!btn) return;
+
+  const showAfter = 300;
+
+  function syncVisibility() {
+    const y = window.scrollY || document.documentElement.scrollTop || 0;
+    btn.classList.toggle('is-visible', y > showAfter);
+  }
+
+  btn.addEventListener('click', () => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    });
+  });
+
+  window.addEventListener('scroll', syncVisibility, { passive: true });
+  window.addEventListener('resize', syncVisibility);
+  syncVisibility();
+}
+
+enhanceBackToTop();

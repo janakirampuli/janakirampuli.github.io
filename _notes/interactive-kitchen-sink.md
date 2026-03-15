@@ -396,9 +396,9 @@ This section demonstrates a single interaction: **drag your mouse over the seque
 
 <section class="ia-section" id="references" markdown="1">
   <div class="ia-section__header">
-    <h2>References</h2>
+    <h2>References:</h2>
   </div>
 
-- [1] [Distill.pub](https://distill.pub/) — explorable explanations and interactive technical storytelling.
+1. [Distill.pub - explorable explanations and interactive technical storytelling](https://distill.pub/)
 
 </section>
