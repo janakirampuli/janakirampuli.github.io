@@ -66,7 +66,7 @@ permalink: /resume/
 ### **Language Modeling from Scratch (CS336)**
 
 - Built foundational language modeling components from the ground up, implementing Byte-Pair Encoding (BPE) tokenization and autoregressive transformer blocks.
-- Studied low-level GPU programming by writing custom CUDA kernels for matrix multiplications and vector additions.
+- Learning low-level GPU programming for writing custom kernels in CUDA, triton
 
 ---
 
@@ -130,15 +130,6 @@ permalink: /resume/
 - System and Method for Agentic Task Execution in MicroTx Workflow Engine
 - Multi-Agent Orchestration with Dynamic Workflow Composition using Agentic planner in workflow
 - Transaction System Task for Distributed Transactions in MicroTx Workflow
-
----
-
-## Extracurricular Activities
-
-- Participated in Oracle volunteer activities supporting community initiatives.
-- Completed an academic year-long fitness course under NSO, IIT Bombay.
-- Competed in volleyball and cricket tournaments conducted by TelCA Sports Council, IIT Bombay.
-- Completed two years of Sanskrit study (intermediate level) with an A1 grade.
 
 ---
 
