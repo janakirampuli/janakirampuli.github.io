@@ -53,6 +53,8 @@ permalink: /resume/
 - Designed and integrated **LRA / Saga patterns** for reliable distributed transaction management.
 - Developed SDKs for distributed transaction protocols: XA (two-phase commit), LRA (long-running transactions), and TCC (try-confirm-cancel), with native Spring Boot integration.
 
+---
+
 ### **Software Developer | HeltarAI**
 *Summer 2022*
 
