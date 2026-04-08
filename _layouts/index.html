@@ -4,23 +4,17 @@ layout: default
 
 <style>
   :root {
-    --ascii-bg: #f6f8fc;
-    --ascii-fg: #1d2a44;
-    --ascii-message: #223456;
-    --ascii-message-shadow: rgba(108, 132, 178, 0.25);
-    --ascii-sky-top: #eef4ff;
-    --ascii-sky-mid: #f6f8fc;
-    --ascii-ground-tint: #e8eefc;
+    --ascii-bg: #f5f0e8;
+    --ascii-fg: #1c1917;
+    --ascii-message: #111111;
+    --ascii-message-shadow: rgba(0, 0, 0, 0.15);
   }
 
   html.dark-mode {
-    --ascii-bg: #0b0f19;
-    --ascii-fg: #cdd9ff;
-    --ascii-message: #d8e2ff;
-    --ascii-message-shadow: rgba(175, 196, 255, 0.25);
-    --ascii-sky-top: #10182b;
-    --ascii-sky-mid: #0b0f19;
-    --ascii-ground-tint: #060914;
+    --ascii-bg: #1c1917;
+    --ascii-fg: #cccccc;
+    --ascii-message: #eeeeee;
+    --ascii-message-shadow: rgba(255, 255, 255, 0.12);
   }
 
   html,
@@ -77,8 +71,7 @@ layout: default
     height: 100%;
     padding: clamp(6px, 1vw, 12px) clamp(8px, 1.4vw, 16px);
     box-sizing: border-box;
-    background:
-      radial-gradient(120% 95% at 50% -10%, var(--ascii-sky-top) 0%, var(--ascii-sky-mid) 56%, var(--ascii-ground-tint) 100%);
+    background: var(--ascii-bg);
     color: var(--ascii-fg);
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: clamp(8px, 1.15vw, 14px);

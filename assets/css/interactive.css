@@ -12,12 +12,12 @@
   --ia-margin-col: 250px;
   --ia-sidenote-width: 230px;
   --ia-max-width-wide: 1400px;
-  --ia-text: #0b0b0c;
-  --ia-muted: rgba(0, 0, 0, 0.72);
-  --ia-border: rgba(127, 127, 127, 0.35);
-  --ia-bg-soft: rgba(0, 0, 0, 0.04);
-  --ia-code-bg: #f6f8fa;
-  --ia-accent: var(--accent-color, #007acc);
+  --ia-text: #1c1917;
+  --ia-muted: rgba(28, 25, 23, 0.68);
+  --ia-border: rgba(100, 80, 65, 0.3);
+  --ia-bg-soft: rgba(28, 25, 23, 0.05);
+  --ia-code-bg: #ede8df;
+  --ia-accent: var(--accent-color, #c96a34);
   --ia-good: #137333;
   --ia-warn: #b45309;
   --ia-bad: #b91c1c;

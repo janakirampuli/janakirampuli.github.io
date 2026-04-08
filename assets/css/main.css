@@ -14,8 +14,8 @@ img, svg, video, canvas {
 }
 
 body {
-    background: #ffffff;
-    color: #000000;
+    background: #f5f0e8;
+    color: #1c1917;
   }
 
   /* Theme icon should always be visible regardless of Hacker theme defaults */
@@ -28,8 +28,7 @@ body {
     --accent-color: #b5e853;
   }
 
-  /* Light mode accent override: the Hacker theme uses neon green (#b5e853)
-     for headings which has low contrast on a white background. */
+  /* Light mode accent override: blue on the cream background. */
   html:not(.dark-mode) {
     --accent-color: #007acc;
   }
@@ -92,18 +91,18 @@ body {
   /* Code blocks: in the hacker theme `pre` text is neon green on a black bg.
      In light mode we want a light background and normal readable text. */
   html:not(.dark-mode) pre {
-    background: #f6f8fa !important;
-    color: #24292f !important;
-    border: 1px solid #d0d7de !important;
+    background: #ede8df !important;
+    color: #2d221e !important;
+    border: 1px solid #c8bfb4 !important;
   }
 
   /* Rouge/Jekyll often wraps code blocks as `.highlight > pre` */
   html:not(.dark-mode) .highlight,
   html:not(.dark-mode) pre.highlight,
   html:not(.dark-mode) .highlight pre {
-    background: #f6f8fa !important;
-    color: #24292f !important;
-    border: 1px solid #d0d7de !important;
+    background: #ede8df !important;
+    color: #2d221e !important;
+    border: 1px solid #c8bfb4 !important;
   }
 
   html:not(.dark-mode) pre code {
@@ -112,9 +111,9 @@ body {
   }
 
   html:not(.dark-mode) code.highlighter-rouge {
-    background: #f6f8fa !important;
-    border: 1px solid #d0d7de !important;
-    color: #24292f !important;
+    background: #ede8df !important;
+    border: 1px solid #c8bfb4 !important;
+    color: #2d221e !important;
   }
 
   /* Light mode: remove Hacker theme glow/text-shadow (looks blurry on white) */
@@ -302,9 +301,9 @@ body {
     width: 40px;
     height: 40px;
     border-radius: 999px;
-    border: 1px solid rgba(127, 127, 127, 0.45);
-    background: rgba(255, 255, 255, 0.92);
-    color: #111;
+    border: 1px solid rgba(127, 127, 127, 0.35);
+    background: rgba(245, 240, 232, 0.95);
+    color: #1c1917;
     font-size: 1.15rem;
     font-weight: 800;
     line-height: 1;
@@ -330,7 +329,7 @@ body {
   }
 
   .back-to-top:hover {
-    background: rgba(255, 255, 255, 1);
+    background: rgba(237, 232, 223, 1);
   }
 
   .back-to-top:focus-visible {
@@ -384,11 +383,11 @@ body {
     /* font-family: 'Georgia', serif; */
     font-size: 1.1rem;
     white-space: pre-wrap;
-    background-color: #f0f0f0;
+    background-color: #ede8df;
     padding: 1rem;
     border-left: 5px solid #007acc;
     margin: 1.5rem 0;
-    color: #222;
+    color: #2d221e;
   }
 
   /* --------------------
@@ -403,13 +402,13 @@ body {
    * About page timeline
    * -------------------- */
   .timeline {
-    --tl-line: rgba(127, 127, 127, 0.3);
-    --tl-card-bg: rgba(255, 255, 255, 0.6);
-    --tl-card-border: rgba(127, 127, 127, 0.32);
-    --tl-text-muted: rgba(0, 0, 0, 0.62);
-    --tl-logo-bg: rgba(255, 255, 255, 0.92);
-    --tl-axis-dot: rgba(127, 127, 127, 0.6);
-    --tl-logo-border: rgba(127, 127, 127, 0.28);
+    --tl-line: rgba(100, 80, 65, 0.3);
+    --tl-card-bg: rgba(237, 232, 223, 0.7);
+    --tl-card-border: rgba(100, 80, 65, 0.28);
+    --tl-text-muted: rgba(28, 25, 23, 0.62);
+    --tl-logo-bg: rgba(245, 240, 232, 0.95);
+    --tl-axis-dot: rgba(100, 80, 65, 0.55);
+    --tl-logo-border: rgba(100, 80, 65, 0.25);
     --tl-logo-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 
     position: relative;
