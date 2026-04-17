@@ -6,30 +6,30 @@ tags: ["interactive", "demo"]
 published: true
 ---
 
-This page is a **kitchen sink for the interactive note components** available on this site.
+A **reference of the reusable components** available for writing notes on this site.
 
-Use it as a reference while writing new notes: each section shows one component, the expected markup, and the rendered behavior.
+Each section shows the intended markup and how it renders. Components are designed to degrade gracefully: content stays readable even if JavaScript fails.
 
 ## Contents
 
 <div class="ia-toc" markdown="1">
 
+- [Callouts](#callouts)
 - [Sidenotes](#sidenotes)
 - [Tooltips](#tooltips)
-- [Tabs](#tabs)
-- [Code + Copy](#code-copy)
-- [Mermaid diagrams](#mermaid)
-- [Interactive widgets](#widgets)
 - [Citations](#citations)
-- [Statements (definition/theorem/proof)](#statements)
-- [Quotes](#quotes)
-- [TODO / checklists](#todo)
-- [Toggles / collapsible](#toggles)
-- [Media + file links](#media)
-- [Figures + zoom](#figures)
+- [Tabs](#tabs)
+- [Code & copy](#code-copy)
+- [Mermaid diagrams](#mermaid)
+- [Statements](#statements)
+- [Quote](#quotes)
+- [Checklist](#todo)
+- [Toggles](#toggles)
+- [Figures](#figures)
+- [Margin figure](#marginfig)
+- [Side-by-side](#sidebyside)
 - [Math](#math)
-- [Distill-ish extras](#distill-ish)
-- [Horizontal scrollytelling](#scrolly)
+- [Stepper](#stepper)
 - [Tables](#tables)
 - [References](#references)
 
@@ -37,14 +37,44 @@ Use it as a reference while writing new notes: each section shows one component,
 
 ---
 
-<section class="ia-section" id="sidenotes" markdown="1">
+<section class="ia-section" id="callouts" markdown="1">
   <div class="ia-section__header">
-    <h2>Sidenotes / margin notes</h2>
+    <h2>Callouts</h2>
   </div>
 
-  On desktop widths this becomes a margin note {% include components/sidenote.html id="sn-1" label="1" text="Margin note on desktop, inline on mobile. Use for asides that shouldn't break the reading flow." %} and the paragraph continues.
+Four kinds - `info` (default), `tip`, `warn`, `danger`. Use sparingly; a note that leans on callouts stops feeling like an essay.
 
-  
+{% capture cb_info %}
+Callouts use a left rule and a small-caps label. No emoji, no fill.
+{% endcapture %}
+{% include components/callout.html type="info" content=cb_info %}
+
+{% capture cb_tip %}
+Prefer `torch.compile` once a kernel is stable - the overhead is paid per first run.
+{% endcapture %}
+{% include components/callout.html type="tip" title="Tip" content=cb_tip %}
+
+{% capture cb_warn %}
+`torch.cuda.synchronize()` will silently hide launch-latency regressions if you wrap all your timings with it.
+{% endcapture %}
+{% include components/callout.html type="warn" title="Warn" content=cb_warn %}
+
+{% capture cb_danger %}
+Do not `rm -rf` the wandb runs directory while a sweep is still writing.
+{% endcapture %}
+{% include components/callout.html type="danger" title="Danger" content=cb_danger %}
+
+</section>
+
+---
+
+<section class="ia-section" id="sidenotes" markdown="1">
+  <div class="ia-section__header">
+    <h2>Sidenotes</h2>
+  </div>
+
+On desktop widths the note floats into the right margin{% include components/sidenote.html id="sn-1" label="1" text="Margin note on desktop, inline on mobile. Use for asides that should not break the reading flow." %}, and the paragraph continues without interruption. Use them for pointer-level remarks: citations, caveats, a nudge to see a related note.
+
 </section>
 
 ---
@@ -54,18 +84,26 @@ Use it as a reference while writing new notes: each section shows one component,
     <h2>Tooltips</h2>
   </div>
 
-  Define a term inline like
-  {% include components/tooltip.html label="**shared memory**" text="Fast on-chip memory shared by threads in a CUDA thread block." %}
-  without breaking the paragraph.
+Define a term inline like {% include components/tooltip.html label="**shared memory**" text="Fast on-chip memory shared by threads in a CUDA thread block." %} without breaking the paragraph. Hover or focus reveals the definition.
 
-  
+</section>
+
+---
+
+<section class="ia-section" id="citations" markdown="1">
+  <div class="ia-section__header">
+    <h2>Citations</h2>
+  </div>
+
+Drop inline references like {% include components/cite.html label="[1]" href="https://distill.pub/" bubble="**Distill.pub** popularized explorable explanations with strong typography and interactive components." %} in the middle of a sentence. The bubble appears on hover or focus and contains a short summary plus a link.
+
 </section>
 
 ---
 
 <section class="ia-section" id="tabs">
   <div class="ia-section__header">
-    <h2>Tabs (code / variants)</h2>
+    <h2>Tabs</h2>
   </div>
 
   <div class="ia-tabs" id="tabs-demo">
@@ -97,21 +135,25 @@ if __name__ == "__main__":
     </div>
   </div>
 
-  
+Arrow-key navigation works inside the tablist.
+
 </section>
 
 ---
 
 <section class="ia-section" id="code-copy" markdown="1">
   <div class="ia-section__header">
-    <h2>Code blocks (+ Copy button)</h2>
+    <h2>Code &amp; copy</h2>
   </div>
 
-```bash
-bundle exec jekyll serve
+Hover a code block to reveal the copy button.
+
+```rust
+fn main() {
+    println!("Hello, world!");
+}
 ```
 
-  
 </section>
 
 ---
@@ -128,64 +170,29 @@ flowchart LR
   C --> D[Compute]
 ```
 
-  
-</section>
-
----
-
-<section class="ia-section" id="widgets" markdown="1">
-  <div class="ia-section__header">
-    <h2>Interactive widgets (Web Components)</h2>
-  </div>
-
-  <h3 style="margin-top:0.8rem;">Runnable JS</h3>
-  <js-runner title="Runnable JS demo">
-    <template>
-// Try editing and re-running
-function fib(n){
-  if(n<=1) return n;
-  return fib(n-1)+fib(n-2);
-}
-
-for (let i=0;i<8;i++) {
-  console.log(i, fib(i));
-}
-    </template>
-  </js-runner>
-
-  
-</section>
-
----
-
-<section class="ia-section" id="citations" markdown="1">
-  <div class="ia-section__header">
-    <h2>Citations (hover bubble)</h2>
-  </div>
-
-  You can drop citations inline like {% include components/cite.html label="[1]" href="https://distill.pub/" bubble="**Distill.pub** popularized explorable explanations with strong typography and interactive components." %} in the middle of a sentence.
-
 </section>
 
 ---
 
 <section class="ia-section" id="statements" markdown="1">
   <div class="ia-section__header">
-    <h2>Statements (definition / theorem / proof)</h2>
+    <h2>Statements</h2>
   </div>
 
+Three kinds: `definition`, `theorem` / `lemma`, and `proof`.
+
   {% capture def_body %}
-  **Softmax:** $\\sigma(x)_i = \exp(x_i) / \sum_j \exp(x_j)$.
+  **Softmax.** $\sigma(x)_i = \exp(x_i) / \sum_j \exp(x_j)$.
   {% endcapture %}
   {% include components/statement.html kind="definition" title="Softmax" body=def_body %}
 
   {% capture thm_body %}
-  If $A$ is symmetric positive definite, then it has a Cholesky factorization $A = LL^T$.
+  If $A$ is symmetric positive definite, then it admits a Cholesky factorization $A = LL^\top$ with $L$ lower triangular and $L_{ii} > 0$.
   {% endcapture %}
   {% include components/statement.html kind="theorem" title="Cholesky" body=thm_body %}
 
   {% capture proof_body %}
-  Sketch: apply induction on matrix size and use Schur complements.
+  Induct on matrix size. Split $A$ with a Schur complement; the complement inherits SPD and yields $L$ by induction.
   {% endcapture %}
   {% include components/statement.html kind="proof" body=proof_body %}
 
@@ -195,7 +202,7 @@ for (let i=0;i<8;i++) {
 
 <section class="ia-section" id="quotes" markdown="1">
   <div class="ia-section__header">
-    <h2>Quote block</h2>
+    <h2>Quote</h2>
   </div>
 
   {% include components/quote.html
@@ -209,7 +216,7 @@ for (let i=0;i<8;i++) {
 
 <section class="ia-section" id="todo" markdown="1">
   <div class="ia-section__header">
-    <h2>TODO / checklists</h2>
+    <h2>Checklist</h2>
   </div>
 
   {% capture todo_body %}
@@ -226,25 +233,25 @@ for (let i=0;i<8;i++) {
 
 <section class="ia-section" id="toggles" markdown="1">
   <div class="ia-section__header">
-    <h2>Toggle lists (accordion)</h2>
+    <h2>Toggles</h2>
   </div>
 
   {% capture toggles_body %}
   <details>
     <summary><strong>Assumptions</strong></summary>
-    
+
     - i.i.d. data
     - bounded gradients
   </details>
-  
+
   <details>
     <summary><strong>Implementation notes</strong></summary>
-    
+
     Use mixed precision and fuse layernorm where possible.
 
     <details>
-      <summary><strong>Nested toggle: micro-optimizations</strong></summary>
-      
+      <summary><strong>Nested - micro-optimizations</strong></summary>
+
       - fuse bias + activation
       - avoid unnecessary casts
     </details>
@@ -256,52 +263,81 @@ for (let i=0;i<8;i++) {
 
 ---
 
-<section class="ia-section" id="media" markdown="1">
+<section class="ia-section" id="figures" markdown="1">
   <div class="ia-section__header">
-    <h2>Media + file links</h2>
+    <h2>Figures</h2>
   </div>
 
-  Images: use the existing figure component.
+Click to zoom into a lightbox; Escape or click outside dismisses.
 
-  Video:
-  {% include components/video.html
-     src="/assets/images/interactive-placeholder.svg"
-     caption="(Demo placeholder) Use MP4/WebM here; this is just showing the wrapper."
-     controls=true
+  {% include components/figure.html
+     src="/assets/images/smile-emoji.svg"
+     alt="smiling emoji"
+     width="180"
+     caption="A local SVG emoji image (click to zoom)."
   %}
 
-  Audio:
-  {% include components/audio.html
-     src="/assets/files/Janaki_Resume.pdf"
-     caption="(Demo placeholder) Use an audio file here; this just shows the wrapper."
-  %}
+### File links
 
-  File link:
-  {% include components/file.html href="/assets/files/Janaki_Resume.pdf" label="Download PDF" %}
+Attach downloads inline: {% include components/file.html href="/assets/files/Janaki_Resume.pdf" label="Download PDF" %}
 
 </section>
 
 ---
 
-<section class="ia-section" id="figures" markdown="1">
+<section class="ia-section" id="marginfig" markdown="1">
   <div class="ia-section__header">
-    <h2>Figures (click to zoom)</h2>
+    <h2>Margin figure</h2>
   </div>
 
-  {% include components/figure.html
-     src="/assets/images/interactive-placeholder.svg"
-     alt="placeholder"
-     caption="A local SVG image (click to zoom)."
+A small diagram that belongs in the right gutter on desktop and stacks inline on mobile - useful when a figure is supporting, not central.
+
+  {% include components/marginfig.html
+     src="/assets/images/smile-emoji.svg"
+     alt="smiling emoji"
+     caption="Emoji image in the gutter on desktop; inline on mobile."
   %}
 
-  
+This paragraph continues flowing in the main column while the figure sits alongside. Good for architecture diagrams that illustrate a single paragraph's point, small plots, or icon-sized schematics.
+
+</section>
+
+---
+
+<section class="ia-section" id="sidebyside" markdown="1">
+  <div class="ia-section__header">
+    <h2>Side-by-side</h2>
+  </div>
+
+Two columns for before/after, input→output, or alternative formulations. Collapses to a stack below 900px.
+
+{% capture sbs_left %}
+```python
+# imperative
+total = 0
+for x in xs:
+    total += x * x
+```
+{% endcapture %}
+
+{% capture sbs_right %}
+```python
+# vectorised
+total = (xs * xs).sum()
+```
+{% endcapture %}
+
+{% include components/sidebyside.html
+   left=sbs_left right=sbs_right
+   left_title="Loop" right_title="NumPy" %}
+
 </section>
 
 ---
 
 <section class="ia-section" id="math" markdown="1">
   <div class="ia-section__header">
-    <h2>Math ($\\LaTeX$)</h2>
+    <h2>Math</h2>
   </div>
 
 Inline: $C_{ij}=\sum_k A_{ik}B_{kj}$.
@@ -315,57 +351,35 @@ $$
 
 ---
 
-<section class="ia-section" id="distill-ish" markdown="1">
+<section class="ia-section" id="stepper" markdown="1">
   <div class="ia-section__header">
-    <h2>Distill-ish extras</h2>
+    <h2>Stepper</h2>
   </div>
 
-### Hover citations
-
-Here is a hover citation {% include components/cite.html label="[1]" href="https://distill.pub/" bubble="Distill.pub popularized explorable explanations with strong typography, diagrams, and interactive components." %} in the middle of a sentence.
-
-### Stepper (discrete interactive steps)
+Discrete steps - good for derivations, ablations, or walk-throughs.
 
 <div class="ia-stepper" data-stepper>
   <div class="ia-stepper__controls"></div>
   <div class="ia-stepper__panel" data-step markdown="1">
 
-**Step 1:** Start with a simple recurrence.
+**Step 1.** Start with a simple recurrence.
 
-$$ a_{t} = \alpha a_{t-1} + x_t $$
-
-  </div>
-  <div class="ia-stepper__panel" data-step markdown="1" hidden>
-
-**Step 2:** Each new token updates state.
-
-This is why step-by-step explanations help.
+$$ a_{t} = \alpha\, a_{t-1} + x_t $$
 
   </div>
   <div class="ia-stepper__panel" data-step markdown="1" hidden>
 
-**Step 3:** Later outputs depend on stored information.
+**Step 2.** Each new token updates state.
 
-Use steppers for derivations or ablations.
+The running average of past inputs is a linear combination governed by $\alpha$.
 
   </div>
-</div>
+  <div class="ia-stepper__panel" data-step markdown="1" hidden>
 
-</section>
+**Step 3.** Later outputs depend on stored information.
 
----
+This is the essence of any recurrent model - the state is the memory.
 
-<section class="ia-section" id="scrolly" markdown="1">
-  <div class="ia-section__header">
-    <h2>Scrollytelling (drag-to-scrub sequence)</h2>
-  </div>
-
-This section demonstrates a single interaction: **drag your mouse over the sequence boxes** to scrub through tokens; the diagram (state + output) updates live.
-
-<div class="ia-xscrolly" data-xscrolly data-tokens="12">
-  <div class="ia-xscrolly__figure">
-    <canvas width="720" height="260"></canvas>
-    <div class="ia-xscrolly__hint">Drag left/right across the top sequence. (Touch works too.)</div>
   </div>
 </div>
 
@@ -378,17 +392,23 @@ This section demonstrates a single interaction: **drag your mouse over the seque
     <h2>Tables</h2>
   </div>
 
-| Component | Type | Keyboard | Notes |
-|---|---|---|---|
-| Sidenote | layout | yes | Margin on desktop, inline on mobile |
-| Tooltip | inline | yes | Hover/focus bubble |
-| Mermaid | diagram | n/a | Rendered in browser |
-| Runnable JS | widget | yes | Edit + run code inline |
-| Drag scrolly | widget | yes | Pointer-drag on canvas |
-| Statement | block | n/a | Definition / theorem / proof |
-| Quote | block | n/a | Pull quote w/ attribution |
-| TODO | block | n/a | Checklist container |
-| File link | inline | yes | Download/link helper |
+| Component       | Type    | Notes                                      |
+|-----------------|---------|--------------------------------------------|
+| Callout         | block   | `info` / `tip` / `warn` / `danger`         |
+| Sidenote        | layout  | Margin on desktop, inline on mobile        |
+| Tooltip         | inline  | Hover / focus bubble                       |
+| Citation        | inline  | Same bubble, with a link                   |
+| Tabs            | block   | Arrow keys navigate                        |
+| Code + copy     | inline  | Hover a `<pre>` to reveal copy             |
+| Mermaid         | diagram | Rendered client-side                       |
+| Statement       | block   | Definition / theorem / proof               |
+| Quote           | block   | Pull quote w/ attribution                  |
+| Checklist       | block   | Strikes completed items                    |
+| Toggles         | block   | Nestable `<details>`                       |
+| Figure          | block   | Click to zoom                              |
+| Margin figure   | layout  | Small figure in gutter                     |
+| Side-by-side    | block   | 2-column, stacks below 900px               |
+| Stepper         | widget  | Prev/Next panels                           |
 
 </section>
 
@@ -396,7 +416,7 @@ This section demonstrates a single interaction: **drag your mouse over the seque
 
 <section class="ia-section" id="references" markdown="1">
   <div class="ia-section__header">
-    <h2>References:</h2>
+    <h2>References</h2>
   </div>
 
 1. [Distill.pub - explorable explanations and interactive technical storytelling](https://distill.pub/)

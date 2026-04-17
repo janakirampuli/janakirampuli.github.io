@@ -1,0 +1,32 @@
+{%- comment -%}
+Two-column side-by-side container. Stacks below 900px.
+
+Usage:
+  {% capture left_body %}
+  ```python
+  before()
+  ```
+  {% endcapture %}
+  {% capture right_body %}
+  ```python
+  after()
+  ```
+  {% endcapture %}
+  {% include components/sidebyside.html
+     left=left_body right=right_body
+     left_title="Before" right_title="After" %}
+{%- endcomment -%}
+<div class="ia-sbs">
+  <div class="ia-sbs__col">
+    {%- if include.left_title -%}
+      <div class="ia-sbs__title">{{ include.left_title }}</div>
+    {%- endif -%}
+    {{ include.left | markdownify }}
+  </div>
+  <div class="ia-sbs__col">
+    {%- if include.right_title -%}
+      <div class="ia-sbs__title">{{ include.right_title }}</div>
+    {%- endif -%}
+    {{ include.right | markdownify }}
+  </div>
+</div>

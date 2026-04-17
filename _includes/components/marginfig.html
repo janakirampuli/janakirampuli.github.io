@@ -1,0 +1,15 @@
+{%- comment -%}
+Small figure in the right margin column on desktop; inline on mobile.
+
+Usage:
+  {% include components/marginfig.html
+     src="/assets/images/some.png"
+     alt="..."
+     caption="A small illustration." %}
+{%- endcomment -%}
+<figure class="ia-marginfig">
+  <img src="{{ include.src }}" alt="{{ include.alt | default: '' }}" loading="lazy" />
+  {%- if include.caption -%}
+    <figcaption class="ia-marginfig__caption">{{ include.caption | markdownify | strip }}</figcaption>
+  {%- endif -%}
+</figure>

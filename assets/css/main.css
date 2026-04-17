@@ -64,28 +64,29 @@ body {
     color: var(--accent-color);
   }
 
-  /* Light mode: the base Hacker theme renders unordered list bullets as a
-     neon-green image (bullet.png) that looks like ">>".
-     Override it to use our light-mode accent color instead. */
-  html:not(.dark-mode) #main_content ul li {
-    list-style-image: none;
-  }
-
-  html:not(.dark-mode) #main_content ul {
+  /* Unified bullet: text ">>" rendered via ::before in both themes.
+     The base Hacker theme uses a bullet.png image; we replace it with text
+     so light + dark share identical layout and only the color differs. */
+  #main_content ul {
     list-style: none;
-    padding-left: 1.4em;
+    padding-left: 2em;
   }
 
-  html:not(.dark-mode) #main_content ul li {
+  #main_content ul li {
+    list-style-image: none;
     position: relative;
   }
 
-  html:not(.dark-mode) #main_content ul li::before {
+  #main_content ul li::before {
     content: ">>";
     position: absolute;
-    left: -1.4em;
+    left: -2em;
+    width: 1.6em;
     color: var(--accent-color);
     font-weight: bold;
+    font-family: var(--ia-font-mono, "JetBrains Mono", Menlo, Consolas, monospace);
+    font-size: 0.9em;
+    line-height: inherit;
   }
 
   /* Code blocks: in the hacker theme `pre` text is neon green on a black bg.
@@ -116,12 +117,73 @@ body {
     color: #2d221e !important;
   }
 
-  /* Light mode: remove Hacker theme glow/text-shadow (looks blurry on white) */
+  /* Light-mode Rouge syntax palette. The base Hacker theme ships a dark-mode
+     palette (neon green on black); on the cream code background those tokens
+     appear washed out. Override with a warm paper-friendly palette. */
+  html:not(.dark-mode) .highlight .c,
+  html:not(.dark-mode) .highlight .c1,
+  html:not(.dark-mode) .highlight .cm,
+  html:not(.dark-mode) .highlight .cs,
+  html:not(.dark-mode) .highlight .cd { color: #8a8478 !important; font-style: italic; }
+  html:not(.dark-mode) .highlight .cp { color: #a8343d !important; }
+
+  html:not(.dark-mode) .highlight .k,
+  html:not(.dark-mode) .highlight .kc,
+  html:not(.dark-mode) .highlight .kd,
+  html:not(.dark-mode) .highlight .kn,
+  html:not(.dark-mode) .highlight .kp,
+  html:not(.dark-mode) .highlight .kr,
+  html:not(.dark-mode) .highlight .kt { color: #a8343d !important; }
+
+  html:not(.dark-mode) .highlight .s,
+  html:not(.dark-mode) .highlight .s1,
+  html:not(.dark-mode) .highlight .s2,
+  html:not(.dark-mode) .highlight .sb,
+  html:not(.dark-mode) .highlight .sc,
+  html:not(.dark-mode) .highlight .sd,
+  html:not(.dark-mode) .highlight .se,
+  html:not(.dark-mode) .highlight .sh,
+  html:not(.dark-mode) .highlight .si,
+  html:not(.dark-mode) .highlight .sx,
+  html:not(.dark-mode) .highlight .sr,
+  html:not(.dark-mode) .highlight .ss { color: #1e5b9a !important; }
+
+  html:not(.dark-mode) .highlight .m,
+  html:not(.dark-mode) .highlight .mb,
+  html:not(.dark-mode) .highlight .mf,
+  html:not(.dark-mode) .highlight .mh,
+  html:not(.dark-mode) .highlight .mi,
+  html:not(.dark-mode) .highlight .mo,
+  html:not(.dark-mode) .highlight .il { color: #7a4d00 !important; }
+
+  html:not(.dark-mode) .highlight .nf,
+  html:not(.dark-mode) .highlight .fm { color: #6f3d9c !important; }
+  html:not(.dark-mode) .highlight .nb,
+  html:not(.dark-mode) .highlight .bp { color: #7a4d00 !important; }
+  html:not(.dark-mode) .highlight .nc,
+  html:not(.dark-mode) .highlight .ne,
+  html:not(.dark-mode) .highlight .nn { color: #7a4d00 !important; }
+  html:not(.dark-mode) .highlight .nd { color: #6f3d9c !important; }
+  html:not(.dark-mode) .highlight .na,
+  html:not(.dark-mode) .highlight .nv,
+  html:not(.dark-mode) .highlight .vc,
+  html:not(.dark-mode) .highlight .vg,
+  html:not(.dark-mode) .highlight .vi { color: #2d221e !important; }
+  html:not(.dark-mode) .highlight .o,
+  html:not(.dark-mode) .highlight .ow { color: #a8343d !important; }
+  html:not(.dark-mode) .highlight .p { color: #2d221e !important; }
+
+  /* Remove Hacker theme glow/text-shadow for cleaner typography in both themes. */
   a,
   a:visited,
   a:hover,
   a:focus,
   h1, h2, h3, h4, h5, h6 {
+    text-shadow: none !important;
+  }
+
+  /* Dark mode: also remove legacy button text glow to reduce perceived blur. */
+  html.dark-mode .btn {
     text-shadow: none !important;
   }
   
@@ -311,7 +373,7 @@ body {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
     z-index: 1100;
 
     opacity: 0;
@@ -341,7 +403,7 @@ body {
     background: rgba(20, 20, 20, 0.92);
     color: rgba(255, 255, 255, 0.92);
     border-color: rgba(255, 255, 255, 0.28);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
   }
 
   html.dark-mode .back-to-top:hover {
@@ -385,7 +447,7 @@ body {
     white-space: pre-wrap;
     background-color: #ede8df;
     padding: 1rem;
-    border-left: 5px solid #007acc;
+    border: 1px solid #c8bfb4;
     margin: 1.5rem 0;
     color: #2d221e;
   }
@@ -409,7 +471,7 @@ body {
     --tl-logo-bg: rgba(245, 240, 232, 0.95);
     --tl-axis-dot: rgba(100, 80, 65, 0.55);
     --tl-logo-border: rgba(100, 80, 65, 0.25);
-    --tl-logo-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+    --tl-logo-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 
     position: relative;
     margin: 1.2rem 0 1.8rem;
@@ -459,7 +521,7 @@ body {
     position: relative;
     width: 3.2rem;
     height: 3.2rem;
-    border-radius: 12px;
+    border-radius: 2px;
     display: grid;
     place-items: center;
     background: var(--tl-logo-bg);
@@ -472,7 +534,7 @@ body {
   .timeline__logo {
     width: 2.6rem;
     height: 2.6rem;
-    border-radius: 6px;
+    border-radius: 0;
     object-fit: contain;
   }
 
@@ -484,7 +546,7 @@ body {
 
   .timeline__card {
     border: 1px solid var(--tl-card-border);
-    border-radius: 14px;
+    border-radius: 2px;
     padding: 0.9rem 1rem;
     background: var(--tl-card-bg);
   }
