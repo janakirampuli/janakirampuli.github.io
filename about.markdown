@@ -8,14 +8,29 @@ permalink: /about/
   <div class="timeline__item">
     <span class="timeline__axis-dot" aria-hidden="true"></span>
     <div class="timeline__logo-wrap" aria-hidden="true">
+      <img class="timeline__logo timeline__logo--fill" src="{{ '/assets/images/warpbuild.png' | relative_url }}" alt="WarpBuild logo" loading="lazy">
+    </div>
+    <div class="timeline__card">
+      <div class="timeline__meta">May 2026 - Present</div>
+      <div class="timeline__title">WarpBuild · Software Engineer</div>
+      <div class="timeline__subtitle">Fast CI/CD · GitHub Actions Runners (YC S21)</div>
+      <div class="timeline__desc">
+        Building high-performance CI/CD infrastructure — drop-in GitHub Actions runners that are faster and cheaper than the defaults — and Helios, an always-on AI automation assistant for software delivery.
+      </div>
+    </div>
+  </div>
+
+  <div class="timeline__item">
+    <span class="timeline__axis-dot" aria-hidden="true"></span>
+    <div class="timeline__logo-wrap" aria-hidden="true">
       <img class="timeline__logo" src="{{ '/assets/images/Oracle-Logo.png' | relative_url }}" alt="Oracle logo" loading="lazy">
     </div>
     <div class="timeline__card">
-      <div class="timeline__meta">Jul 2024 - Present</div>
+      <div class="timeline__meta">Jul 2024 - May 2026</div>
       <div class="timeline__title">Oracle · Software Developer (IC2)</div>
       <div class="timeline__subtitle">MicroTx · Agentic Workflows</div>
       <div class="timeline__desc">
-        Working on durable, scalable workflow orchestration and LLM-integrated agentic workflows for enterprise microservices.
+        Worked on durable, scalable workflow orchestration and LLM-integrated agentic workflows for enterprise microservices.
       </div>
     </div>
   </div>
@@ -90,4 +105,4 @@ permalink: /about/
 
 ---
 
-Hey, I'm Janaki Ram -- a Software Developer at Oracle, where I work on the Transaction Manager for Microservices ([MicroTx](https://www.oracle.com/database/transaction-manager-for-microservices/)) team. I'm interested in AI and distributed systems.
+Hey, I'm Janaki Ram -- a Software Engineer at [WarpBuild](https://www.warpbuild.com/) (YC S21), where I work on some good problems around CI/CD infra and agents for work automation. Before this, I spent two years at Oracle on the Transaction Manager for Microservices ([MicroTx](https://www.oracle.com/database/transaction-manager-for-microservices/)) team. I'm interested in AI and distributed systems.

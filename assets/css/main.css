@@ -599,4 +599,13 @@ body {
       height: 2.1rem;
     }
   }
-  
+
+  /* Logos that are self-contained icon tiles fill the frame edge-to-edge */
+  .timeline__logo--fill {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    background: #000;
+  }
+

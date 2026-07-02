@@ -12,7 +12,7 @@ permalink: /resume/
   </a>
 </p>
 
-**Software Developer, Oracle**
+**Software Engineer, WarpBuild**
 
 **Interests:** Deep Learning & Machine Learning · Distributed Systems · Agentic Systems
 
@@ -35,13 +35,21 @@ permalink: /resume/
 
 ## Work Experience
 
+### **Software Engineer | WarpBuild**
+*May 2026 - Present*
+
+- Building high-performance CI/CD infrastructure at WarpBuild (YC S21): drop-in GitHub Actions runners that are ~2x faster and ~50% cheaper than GitHub-hosted runners.
+- Working on Helios, an always-on AI automation assistant for software delivery workflows.
+
+---
+
 ### **Software Developer (IC2) | Oracle -- MicroTx Agentic Workflows**
-*Jul 2024 - Present*
+*Jul 2024 - May 2026*
 
 - Evaluated workflow execution engines (Conductor, Temporal, Restate) and led adoption of an open-source orchestrator; analyzed consistency, failure recovery, and scalability trade-offs.
 - Extended the orchestration platform with AI-native tasks and service connectors, enabling LLM-driven agentic workflows coordinating long-running microservice operations.
 - Implemented durable workflow execution using persistent state storage, retries, compensation (saga-style recovery), and idempotent task handling across distributed services.
-- Currently hardening the platform with a focus on security and performance to improve reliability, low-latency scheduling, and high-throughput task processing before release.
+- Hardened the platform with a focus on security and performance to improve reliability, low-latency scheduling, and high-throughput task processing before release.
 
 ---
 
@@ -68,7 +76,7 @@ permalink: /resume/
 ### **Language Modeling from Scratch (CS336)**
 
 - Built foundational language modeling components from the ground up, implementing Byte-Pair Encoding (BPE) tokenization and autoregressive transformer blocks.
-- Learning low-level GPU programming for writing custom kernels in CUDA, triton
+- Implemented custom **CUDA** kernels for core tensor operations and built **FlashAttention** using **Triton** to optimize memory efficiency and training throughput.
 
 ---
 
@@ -76,7 +84,7 @@ permalink: /resume/
 
 - Built fundamental machine learning classifiers (k-NN, SVM, Softmax) and a two-layer neural network from scratch using NumPy on CIFAR-10.
 - Implemented modular deep learning components with custom forward and backward passes for CNNs, Batch Normalization, and Dropout.
-- Developed an image captioning system using RNNs and LSTMs, and implemented methods including SimCLR, CLIP, DINO, and DDPM.
+- Developed an image captioning system using RNNs and LSTMs, and implemented advanced vision, self-supervised, and generative methods including **SimCLR** (contrastive learning), **CLIP**, **DINO**, and **DDPM**.
 
 ---
 
@@ -87,11 +95,11 @@ permalink: /resume/
 - Implemented a Transformer model from scratch, including multi-head self-attention, positional encoding, and feed-forward blocks.
 
 ### **Adversarial ML: Evasion Attacks on Classifiers**
-*B.Tech Research Project -- Advisor: Prof. Virendra Singh (Spring 2024)*
+*Research Assistant, IIT Bombay -- Advisor: Prof. Virendra Singh · B.Tech Thesis*
 
-- Studied adversarial ML in security-critical settings.
-- Implemented gradient-based attacks against linear models and SVM classifiers for error-generic and error-specific evasion.
-- Evaluated on MNIST and explored defenses such as adversarial training.
+- Researched adversarial machine learning, focusing on evasion attacks in security-critical domains.
+- Implemented gradient-based attacks on **SVMs and linear models** for error-generic and error-specific evasion.
+- Evaluated attacks on **MNIST**, demonstrating vulnerabilities and exploring defenses such as adversarial training.
 
 ---
 
@@ -136,4 +144,4 @@ permalink: /resume/
 ---
 
 
-*Last updated: 3 Mar, 2026*
+*Last updated: 3 Jul, 2026*
