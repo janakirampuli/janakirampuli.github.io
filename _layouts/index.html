@@ -8,6 +8,11 @@ layout: default
     --ascii-fg: #1c1917;
     --ascii-message: #111111;
     --ascii-message-shadow: rgba(0, 0, 0, 0.15);
+    --ascii-dim: rgba(28, 25, 23, 0.45);
+    --ascii-flame: #d9480f;
+    --ascii-ball: #c2410c;
+    --ascii-planet: #b45309;
+    --ascii-sun: #d97706;
   }
 
   html.dark-mode {
@@ -15,7 +20,19 @@ layout: default
     --ascii-fg: #cccccc;
     --ascii-message: #eeeeee;
     --ascii-message-shadow: rgba(255, 255, 255, 0.12);
+    --ascii-dim: rgba(204, 204, 204, 0.45);
+    --ascii-flame: #ff9f43;
+    --ascii-ball: #ff8c42;
+    --ascii-planet: #e07a4f;
+    --ascii-sun: #ffd166;
   }
+
+  .ascii-scene .a-dim { color: var(--ascii-dim); }
+  .ascii-scene .a-flame { color: var(--ascii-flame); }
+  .ascii-scene .a-ball { color: var(--ascii-ball); }
+  .ascii-scene .a-planet { color: var(--ascii-planet); }
+  .ascii-scene .a-sun { color: var(--ascii-sun); }
+  .ascii-scene .a-accent { color: var(--accent-color); }
 
   html,
   body {
@@ -168,6 +185,7 @@ layout: default
     let rocketBaseY = horizon - 1;
     let stars = [];
     let birds = [];
+    let clouds = [];
     let returnSequenceStartMs = null;
     let landingTouchdownMs = null;
     let returnOrigin = null;
@@ -219,8 +237,22 @@ layout: default
       "  `--'  ",
     ];
 
-    const ignitionMs = 2000;
-    const launchMs = 1000;
+    const sunShape = [
+      "   \\ | /   ",
+      "  -- O --  ",
+      "   / | \\   ",
+    ];
+
+    const cloudShape = [
+      "   .--.    ",
+      ".-(    ).  ",
+      "(___.__)__)",
+    ];
+
+    const ignitionMs = 2200;
+    const launchMs = 3200;
+    const FRAME_MS = 33;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const returnTriggerDelayMs = 220;
     const returnDescentMs = 7600;
     const returnLandingMs = 2400;
@@ -243,6 +275,25 @@ layout: default
     let deleting = false;
     let nextTypeAt = start;
     let loopingTagline = "";
+
+    // A fixed list of stars, so the sky does not change on a resize.
+    function seededRandom(seed) {
+      let a = seed;
+      return () => {
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const starRandom = seededRandom(23);
+    const starPool = Array.from({ length: MAX_COLS }, () => ({
+      fx: starRandom(),
+      fy: starRandom(),
+      phase: starRandom() * Math.PI * 2,
+      speed: 0.8 + starRandom() * 2.4,
+    }));
 
     function getEffectiveViewportHeight() {
       const viewport = window.visualViewport;
@@ -293,12 +344,18 @@ layout: default
       const starCount = Math.max(isCompact ? 54 : 72, Math.floor(width * (isCompact ? 1.18 : 0.95)));
       const starBandBottom = Math.max(4, Math.floor(horizon * (isCompact ? 0.46 : 0.46)));
       const starTopOffset = isCompact ? 0 : 1;
-      stars = Array.from({ length: starCount }, () => ({
-        x: Math.floor(Math.random() * width),
-        y: Math.floor(Math.random() * starBandBottom) + starTopOffset,
-        phase: Math.random() * Math.PI * 2,
-        speed: 0.8 + Math.random() * 2.4,
+      stars = starPool.slice(0, starCount).map((star) => ({
+        x: Math.floor(star.fx * width),
+        y: Math.floor(star.fy * starBandBottom) + starTopOffset,
+        phase: star.phase,
+        speed: star.speed,
       }));
+
+      clouds = [
+        { x: width * 0.1, y: 2, speed: 0.55 },
+        { x: width * 0.46, y: Math.max(4, Math.floor(horizon * 0.22)), speed: 0.35 },
+        { x: width * 0.74, y: Math.max(3, Math.floor(horizon * 0.12)), speed: 0.45 },
+      ].slice(0, isCompact ? 2 : 3);
 
       shootingStar = {
         active: false,
@@ -351,16 +408,52 @@ layout: default
       }
     }
 
+    // The grid keeps one character for each cell. `grid.cls` keeps its color class.
     function makeGrid() {
-      return Array.from({ length: height }, () => Array(width).fill(" "));
+      const grid = Array.from({ length: height }, () => Array(width).fill(" "));
+      grid.cls = Array.from({ length: height }, () => Array(width).fill(""));
+      return grid;
     }
 
-    function put(grid, x, y, char) {
-      if (x >= 0 && x < width && y >= 0 && y < height) grid[y][x] = char;
+    function put(grid, x, y, char, cls = "") {
+      if (x >= 0 && x < width && y >= 0 && y < height) {
+        grid[y][x] = char;
+        grid.cls[y][x] = char === " " ? "" : cls;
+      }
     }
 
-    function drawText(grid, x, y, text) {
-      for (let i = 0; i < text.length; i += 1) put(grid, x + i, y, text[i]);
+    function drawText(grid, x, y, text, cls = "") {
+      for (let i = 0; i < text.length; i += 1) put(grid, x + i, y, text[i], cls);
+    }
+
+    // Same as drawText, but a space does not erase the cell below it.
+    function drawSprite(grid, x, y, text, cls = "") {
+      for (let i = 0; i < text.length; i += 1) {
+        if (text[i] !== " ") put(grid, x + i, y, text[i], cls);
+      }
+    }
+
+    const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;" };
+
+    function renderGrid(grid) {
+      let html = "";
+      for (let y = 0; y < height; y += 1) {
+        const row = grid[y];
+        const cls = grid.cls[y];
+        let run = "";
+        let runCls = "";
+        for (let x = 0; x < width; x += 1) {
+          if (cls[x] !== runCls) {
+            if (run) html += runCls ? `<span class="a-${runCls}">${run}</span>` : run;
+            run = "";
+            runCls = cls[x];
+          }
+          run += HTML_ESCAPES[row[x]] || row[x];
+        }
+        if (run) html += runCls ? `<span class="a-${runCls}">${run}</span>` : run;
+        if (y < height - 1) html += "\n";
+      }
+      pre.innerHTML = html;
     }
 
     function clamp(value, min, max) {
@@ -415,7 +508,7 @@ layout: default
 
       for (let y = horizon - 6; y <= horizon - 1; y += 1) put(grid, poleX, y, "|");
       for (let y = rimY - 1; y <= rimY + 1; y += 1) put(grid, boardX, y, "|");
-      drawText(grid, rimX, rimY, "===");
+      drawText(grid, rimX, rimY, "===", "ball");
 
       let netFrame = 0;
       let offenseX = offenseBaseX;
@@ -508,7 +601,7 @@ layout: default
         put(grid, rimCenterX + 1, rimY + 2, "v");
       }
 
-      if (ballVisible) put(grid, ballX, ballY, "o");
+      if (ballVisible) put(grid, ballX, ballY, "o", "ball");
     }
 
     function drawMiddleIntro(grid, globalElapsedMs) {
@@ -531,7 +624,8 @@ layout: default
       const visibleText = middlePhrase.slice(0, typedCount);
       const cursorOn = Math.floor(globalElapsedMs / 460) % 2 === 0;
       const cursor = cursorOn ? "|" : " ";
-      drawText(grid, textX, textY, `${visibleText}${cursor}`);
+      drawText(grid, textX, textY, visibleText, "accent");
+      put(grid, textX + visibleText.length, textY, cursor);
     }
 
     function drawLoopingTagline(grid, globalElapsedMs) {
@@ -555,20 +649,37 @@ layout: default
       if (isCompact) {
         const mx = clamp(Math.floor(width * 0.58), 1, width - marsShapeCompact[0].length - 1);
         const my = 1;
-        marsShapeCompact.forEach((line, row) => drawText(grid, mx, my + row, line));
+        marsShapeCompact.forEach((line, row) => drawText(grid, mx, my + row, line, "planet"));
         return;
       }
 
       const mx = Math.max(1, width - 18);
       const my = 1;
-      marsShape.forEach((line, row) => drawText(grid, mx, my + row, line));
+      marsShape.forEach((line, row) => drawText(grid, mx, my + row, line, "planet"));
+    }
+
+    // The light theme shows a day sky: a sun and clouds in the place of Mars and stars.
+    function drawSun(grid) {
+      const sx = isCompact
+        ? clamp(Math.floor(width * 0.58), 1, width - sunShape[0].length - 1)
+        : Math.max(1, width - 17);
+      sunShape.forEach((line, row) => drawSprite(grid, sx, 1 + row, line, "sun"));
+    }
+
+    function drawClouds(grid, dt) {
+      const cloudWidth = cloudShape[0].length;
+      clouds.forEach((cloud) => {
+        cloud.x += cloud.speed * (dt / 1000);
+        if (cloud.x > width + 2) cloud.x = -cloudWidth - 2;
+        cloudShape.forEach((line, row) => drawSprite(grid, Math.round(cloud.x), cloud.y + row, line, "dim"));
+      });
     }
 
     function drawStars(grid, seconds) {
       stars.forEach((star) => {
         const pulse = Math.sin(seconds * star.speed + star.phase);
         const char = pulse > 0.66 ? "✶" : pulse > 0.36 ? "✦" : pulse > -0.05 ? "*" : ".";
-        put(grid, star.x, star.y, char);
+        put(grid, star.x, star.y, char, pulse > 0.36 ? "" : "dim");
       });
     }
 
@@ -600,7 +711,7 @@ layout: default
         const tx = sx - i;
         const ty = sy + Math.round(i * 0.42);
         const char = i <= 2 ? "✦" : i <= 4 ? "*" : ".";
-        put(grid, tx, ty, char);
+        put(grid, tx, ty, char, i <= 2 ? "" : "dim");
       }
 
       if (sx > width + shootingStar.trail + 12 || sy < 1) {
@@ -625,7 +736,7 @@ layout: default
       const groundLayers = ["_", "~", "."];
       groundLayers.forEach((char, index) => {
         const y = horizon + index;
-        if (y < height) drawText(grid, 0, y, char.repeat(width));
+        if (y < height) drawText(grid, 0, y, char.repeat(width), index === 0 ? "" : "dim");
       });
       const padY = Math.min(horizon + 1, height - 1);
       drawText(grid, rocketBaseX - 1, padY, "|||||||||");
@@ -662,7 +773,7 @@ layout: default
       drawText(grid, kx, ky, "  o  ");
       drawText(grid, kx, ky + 1, arm);
       drawText(grid, kx, ky + 2, legs);
-      drawText(grid, kx + 5, ky + 1, spark);
+      drawSprite(grid, kx + 5, ky + 1, spark, "flame");
     }
 
     function drawRocket(grid, elapsedMs, rocketX, rocketY) {
@@ -670,15 +781,37 @@ layout: default
       const drawX = Math.round(rocketX);
       rocketShape.forEach((line, i) => drawText(grid, drawX, topY + i, line));
 
-      const ignited = elapsedMs >= ignitionMs;
-      if (!ignited) return;
+      if (elapsedMs < ignitionMs) return;
 
-      const launch = elapsedMs >= launchMs;
       const flameY = Math.round(rocketY + 1);
-      const flame = launch
-        ? (Math.sin(elapsedMs * 0.02) > 0 ? "   \\/    " : "   /\\    ")
-        : (Math.sin(elapsedMs * 0.03) > 0 ? "   !!    " : "   !!    ");
-      drawText(grid, drawX, flameY, flame);
+      const flicker = Math.floor(elapsedMs / 90) % 2 === 0;
+
+      // The engines start before the rocket leaves the pad.
+      if (elapsedMs < launchMs) {
+        drawSprite(grid, drawX, flameY, flicker ? "   **    " : "   !!    ", "flame");
+        return;
+      }
+
+      drawSprite(grid, drawX, flameY, flicker ? "   \\/    " : "   /\\    ", "flame");
+      drawSprite(grid, drawX, flameY + 1, flicker ? "    :    " : "    '    ", "flame");
+      drawSprite(grid, drawX, flameY + 2, flicker ? "         " : "    .    ", "dim");
+    }
+
+    // Smoke that spreads along the ground from the pad at ignition.
+    function drawLaunchSmoke(grid, elapsedMs) {
+      if (elapsedMs < ignitionMs || elapsedMs > launchMs + 3600) return;
+
+      const puffs = ["o", "O", "@"];
+      const reach = Math.min(7, Math.floor((elapsedMs - ignitionMs) / 260) + 1);
+      const thin = elapsedMs > launchMs + 1800;
+      const centerX = rocketBaseX + 4;
+      const y = horizon - 1;
+
+      for (let i = 1; i <= reach; i += 1) {
+        const char = thin ? "." : puffs[(i + Math.floor(elapsedMs / 220)) % puffs.length];
+        put(grid, centerX - 2 - i, y, char, "dim");
+        put(grid, centerX + 2 + i, y, char, "dim");
+      }
     }
 
     function computeReturnState(elapsedMs, seconds) {
@@ -749,28 +882,38 @@ layout: default
 
       if (returnState.phase === "descent" && Math.sin(elapsedMs * 0.014) > 0.5) {
         const burst = descentThrusterFrames[Math.floor(elapsedMs / 150) % descentThrusterFrames.length];
-        drawText(grid, returnState.x, craftBottomY, burst);
+        drawSprite(grid, returnState.x, craftBottomY, burst, "flame");
       }
 
       if (returnState.phase === "landing") {
         const flameFrame = landingBurnFrames[Math.floor(elapsedMs / 170) % landingBurnFrames.length];
-        drawText(grid, returnState.x, craftBottomY, flameFrame[0]);
-        drawText(grid, returnState.x, craftBottomY + 1, flameFrame[1]);
+        drawSprite(grid, returnState.x, craftBottomY, flameFrame[0], "flame");
+        drawSprite(grid, returnState.x, craftBottomY + 1, flameFrame[1], "flame");
       }
 
       if (returnState.phase === "landed" && returnState.landedFor > 1000) {
         const glowChar = Math.sin(seconds * 2.6) > 0 ? "✶" : "✦";
         const glowX = returnState.x + Math.floor(shape[0].length / 2);
-        put(grid, glowX, returnState.y - 1, glowChar);
+        put(grid, glowX, returnState.y - 1, glowChar, "accent");
       }
     }
 
     function frame(now) {
+      // A person who asked for less motion gets one still frame.
+      const still = reduceMotion.matches;
+
+      if (!still && now - prev < FRAME_MS) {
+        requestAnimationFrame(frame);
+        return;
+      }
+
       refreshIfLayoutChanged();
 
-      const globalElapsedMs = now - start;
+      const globalElapsedMs = still ? 1e7 : now - start;
 
-      if (now >= nextTypeAt) {
+      if (still) {
+        loopingTagline = phrase;
+      } else if (now >= nextTypeAt) {
         if (!deleting) {
           charIndex += 1;
           if (charIndex >= phrase.length) {
@@ -794,21 +937,21 @@ layout: default
         loopingTagline = phrase.slice(0, charIndex);
       }
 
-      const sceneElapsedMs = now - sceneStartMs;
+      const sceneElapsedMs = still ? 0 : now - sceneStartMs;
       const seconds = sceneElapsedMs / 1000;
-      const dt = now - prev;
+      const dt = still ? 0 : now - prev;
       prev = now;
 
       const grid = makeGrid();
 
+      // The rocket starts slowly and gets faster, and it leans to the right as it climbs.
       let rocketOffset = 0;
       let rocketXOffset = 0;
       if (sceneElapsedMs > launchMs) {
-        const launchElapsed = sceneElapsedMs - launchMs;
-        const verticalLaunchDivisor = isCompact ? 360 : 540;
-        const horizontalLaunchDivisor = isCompact ? 380 : 470;
-        rocketOffset = Math.min(height + 4, launchElapsed / verticalLaunchDivisor);
-        rocketXOffset = Math.min(Math.max(0, width - rocketBaseX - 10), launchElapsed / horizontalLaunchDivisor);
+        const t = (sceneElapsedMs - launchMs) / 1000;
+        const accel = isCompact ? 2 : 1.3;
+        rocketOffset = Math.min(height + 4, 0.5 * accel * t * t + 0.4 * t);
+        rocketXOffset = Math.min(Math.max(0, width - rocketBaseX - 10), rocketOffset * 1.15);
       }
 
       const rocketY = rocketBaseY - rocketOffset;
@@ -832,24 +975,39 @@ layout: default
         return;
       }
 
-      drawStars(grid, seconds);
-      drawShootingStar(grid, sceneElapsedMs, dt);
-      drawMars(grid);
-      drawBirds(grid, seconds, dt);
+      // Night sky in the dark theme, day sky in the light theme.
+      if (document.documentElement.classList.contains("dark-mode")) {
+        drawStars(grid, seconds);
+        drawShootingStar(grid, sceneElapsedMs, dt);
+        drawMars(grid);
+      } else {
+        drawSun(grid);
+        drawClouds(grid, dt);
+        drawBirds(grid, seconds, dt);
+      }
+
       drawGround(grid);
       drawBasketballCourt(grid, sceneElapsedMs, seconds);
       drawMiddleIntro(grid, globalElapsedMs);
       drawLoopingTagline(grid, globalElapsedMs);
       drawRocket(grid, sceneElapsedMs, rocketX, rocketY);
+      drawLaunchSmoke(grid, sceneElapsedMs);
       drawReturnCraft(grid, sceneElapsedMs, seconds, returnState);
       drawKid(grid, seconds, rocketY, returnState);
 
-      pre.textContent = grid.map((row) => row.join("")).join("\n");
+      renderGrid(grid);
 
-      requestAnimationFrame(frame);
+      if (!still) requestAnimationFrame(frame);
+    }
+
+    function redrawIfStill() {
+      if (reduceMotion.matches) requestAnimationFrame(frame);
     }
 
     refreshSceneBounds();
+    window.addEventListener("resize", redrawIfStill);
+    document.getElementById("theme-toggle")?.addEventListener("click", redrawIfStill);
+    reduceMotion.addEventListener?.("change", () => requestAnimationFrame(frame));
     window.addEventListener("resize", refreshSceneBounds);
     window.visualViewport?.addEventListener("resize", refreshSceneBounds);
     window.visualViewport?.addEventListener("scroll", refreshSceneBounds);

@@ -223,6 +223,14 @@ body {
     display: inline-block;
   }
 
+  /* The link of the section that is open now */
+  #pages a[aria-current="page"],
+  html:not(.dark-mode) #pages a[aria-current="page"] {
+    color: var(--accent-color);
+    font-weight: bold;
+    text-decoration: none;
+  }
+
   /* The base hacker theme uses a negative left margin on the header title.
      On some screens this can create page-level horizontal scrolling. */
   header h1 {

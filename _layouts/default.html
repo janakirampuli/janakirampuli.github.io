@@ -49,7 +49,8 @@
           <!-- Add Home page url "/" -->
           {%- if site.nav -%}
             {%- for item in site.nav -%}
-              <a href="{{ item.url | relative_url }}">{{ item.title | escape }}</a>
+              {%- assign url_start = page.url | slice: 0, item.url.size -%}
+              <a href="{{ item.url | relative_url }}"{% if url_start == item.url or item.url == '/blog/' and page.layout == 'post' %} aria-current="page"{% endif %}>{{ item.title | escape }}</a>
             {%- endfor -%}
           {%- else -%}
             <a href="{{ '/' | relative_url }}">Home</a>
