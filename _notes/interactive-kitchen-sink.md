@@ -3,7 +3,7 @@ layout: notes
 title: "Interactive kitchen sink"
 date: 2026-02-24
 tags: ["interactive", "demo"]
-published: true
+published: false
 ---
 
 A **reference of the reusable components** available for writing notes on this site.
