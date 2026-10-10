@@ -514,7 +514,7 @@ until pi(s) == pi_old(s) for all s    # policy stable; fix ties consistently
 
 q-function role: improvement only needs Q^pi from old pi, then argmax over a per state.
 
-helper (one-step bellman backup for fixed pi — use inside evaluation):
+helper (one-step bellman backup for fixed pi, use inside evaluation):
 
 ```
 # deterministic pi: pi(s) in A
@@ -565,7 +565,7 @@ finite horizon H: values can depend on time step; backward induction / horizon-k
 
 simulation / monte carlo policy evaluation: roll out pi from s, average total discounted return over many episodes. needs sampling access, not full tabular sum; accuracy ~ 1/sqrt(n) in n rollouts; no markov assumption needed for unbiased estimate of true return (but variance stuff still matters).
 
-pseudocode (mc estimate of V^pi(s) — model-free rollouts):
+pseudocode (mc estimate of V^pi(s), model-free rollouts):
 
 ```
 function rollout_return(start_state s, policy pi):
@@ -592,7 +592,7 @@ L3:
 
 bridge from planning: tabular = one value per state in a table (vs nn weights shared across states). VI and PI both converge to correct V* / pi* in finite discrete mdps; VI needs many backups per round, PI often fewer outer iterations but each round solves evaluation exactly. toy example: one state, self-loop reward 1 => V = 1 + gamma + gamma^2 + ... = 1/(1-gamma); VI moves V toward that in steps; PI evaluates that policy in one evaluation pass.
 
-this lecture: estimate V^pi (or Q^pi) from data only — no given P,r — still tabular. evaluation matters because control methods (dqnn, policy gradients) repeatedly evaluate a fixed policy.
+this lecture: estimate V^pi (or Q^pi) from data only (no given P,r), still tabular. evaluation matters because control methods (dqnn, policy gradients) repeatedly evaluate a fixed policy.
 
 definitions:
 
@@ -606,7 +606,7 @@ bootstrapping: build target from reward + estimated future value (dp and td do t
 
 ---
 
-dynamic programming policy evaluation (model known) — reminder:
+dynamic programming policy evaluation (model known), a reminder:
 
 V(s) <- sum_a pi(a|s) [ r(s,a) + gamma sum_{s'} P(s'|s,a) V(s') ]
 
@@ -632,7 +632,7 @@ loop forever:
     V(s) <- average(Returns(s))
 ```
 
-properties: does not need markov structure — any sequential process, average outcomes. needs episodic termination (or mc with truncating approximations for continuing tasks). variable-length episodes ok.
+properties: does not need markov structure: any sequential process, average outcomes. needs episodic termination (or mc with truncating approximations for continuing tasks). variable-length episodes ok.
 
 first-visit vs every-visit:
 
@@ -701,7 +701,7 @@ then run dp policy evaluation on (P_hat, r_hat) as if model were true. ignores m
 
 batch mc vs batch td on finite data:
 
-with infinite data both tend to true V^pi under assumptions. with finite data they can disagree: mc averages observed returns (mse to empirical returns). td imposes bellman consistency between successive states — uses markov structure; same batch td solution can match “solve dp on maximum-likelihood mdp built from counts” (lecture equivalence story).
+with infinite data both tend to true V^pi under assumptions. with finite data they can disagree: mc averages observed returns (mse to empirical returns). td imposes bellman consistency between successive states, which uses markov structure; same batch td solution can match “solve dp on maximum-likelihood mdp built from counts” (lecture equivalence story).
 
 if markov property wrong, td assumptions hurt; mc still estimates average return under pi.
 
@@ -902,7 +902,7 @@ log P(tau; theta) = log mu(s0) + sum_{t=0}^{T-1} [ log pi_theta(a_t|s_t) + log P
 
 grad_theta log P(tau; theta) = sum_{t=0}^{T-1} grad_theta log pi_theta(a_t|s_t)
 
-terms from transition model drop out — model-free wrt dynamics.
+terms from transition model drop out, so model-free wrt dynamics.
 
 score function = grad_theta log pi_theta(a|s) (derivative of log likelihood).
 
@@ -1015,7 +1015,7 @@ grad J ~ E[ grad log pi(a|s) * A^{pi}(s,a) ],   A = Q - V
 
 why vanilla policy gradients hurt:
 
-- sample efficiency: on-policy — often throw data away after one gradient step
+- sample efficiency: on-policy, often throw data away after one gradient step
 - step size in theta space is not step size in policy space (two logits can mean huge pi change)
 - too large alpha => performance collapse; too small => slow
 
@@ -1037,7 +1037,7 @@ rewrite with importance sampling from pi:
 
 = (1/(1-gamma)) E_{s ~ d^{pi'}, a ~ pi}[ (pi'(a|s) / pi(a|s)) * A^pi(s,a) ]
 
-problem: still need samples under pi' for exact expectation — circle.
+problem: still need samples under pi' for exact expectation (circular).
 
 ---
 
@@ -1053,7 +1053,7 @@ trajectory form:
 
 L_pi(pi') = E_{tau ~ pi}[ sum_t gamma^t (pi'(a_t|s_t) / pi(a_t|s_t)) A^pi(s_t,a_t) ]
 
-optimize this using rollouts from old pi — per-step ratio instead of full trajectory product (stable weights vs full trajectory is ratios).
+optimize this using rollouts from old pi: per-step ratio instead of full trajectory product (stable weights vs full trajectory is ratios).
 
 bound intuition (slides): true improvement minus surrogate is bounded by expected KL(pi' || pi) (policy close in KL => surrogate trustworthy). cite achiam et al style bounds on slides.
 
@@ -1063,15 +1063,15 @@ DKL(pi' || pi)[s] = sum_a pi'(a|s) log (pi'(a|s) / pi(a|s))
 
 ---
 
-ppo (proximal policy optimization) — keep pi' near pi without natural gradients:
+ppo (proximal policy optimization), keeping pi' near pi without natural gradients:
 
-variant 1 — kl penalty:
+variant 1 (kl penalty):
 
 theta_{k+1} = argmax_theta  L_{theta_k}(theta) - beta_k * avg_s DKL(pi_theta || pi_{theta_k})
 
 adapt beta_k up/down so kl stays near target delta.
 
-variant 2 — clipped objective (common in code):
+variant 2, clipped objective (common in code):
 
 r_t(theta) = pi_theta(a_t|s_t) / pi_{theta_k}(a_t|s_t)
 
@@ -1084,7 +1084,7 @@ pseudocode (ppo-clip skeleton):
 ```
 theta_old <- theta
 collect trajectories with pi_{theta_old}
-compute advantages A_hat_t (gae / n-step / mc minus V — however you implement)
+compute advantages A_hat_t (gae / n-step / mc minus V, however you implement)
 for several minibatch epochs over that data:
   r_t <- pi_theta(a_t|s_t) / pi_{theta_old}(a_t|s_t)
   L_t <- min( r_t * A_hat_t, clip(r_t, 1-eps, 1+eps) * A_hat_t )
@@ -1099,16 +1099,16 @@ importance sampling reminder:
 
 E_{x~P}[f(x)] = E_{x~Q}[ (P(x)/Q(x)) f(x) ]
 
-variance blows up if ratio huge — motivates keeping pi close when reusing data.
+variance blows up if ratio huge, which motivates keeping pi close when reusing data.
 
-full trajectory importance ratio product over t explodes — per-step ratio in surrogate avoids that.
+full trajectory importance ratio product over t explodes; per-step ratio in surrogate avoids that.
 
 ---
 
 misc:
 
 - n-step / gae-style advantage estimates: blend td and mc (same idea as l5)
-- ppo popular (incl. llm rlhf pipelines); implementation details (reward scale, lr, obs norm) matter — see “implementation matters” iclr 2020 on ppo/trpo
+- ppo popular (incl. llm rlhf pipelines); implementation details (reward scale, lr, obs norm) matter (see “implementation matters” iclr 2020 on ppo/trpo)
 
 next lecture (course): more monotonic improvement theory & trust regions if continued in sequence.
 
@@ -1162,7 +1162,7 @@ bound shape (achiam-style): true improvement minus surrogate controlled by expec
 
 L_pi(pi') - C_q * E_s~d^{pi}[ KL(pi'||pi)[s] ]
 
-gives guaranteed improvement when penalty tight enough; theoretical C_q large when gamma near 1 => tiny steps — motivates practical kl penalties / trust regions / ppo clipping instead.
+gives guaranteed improvement when penalty tight enough; theoretical C_q large when gamma near 1 => tiny steps, which motivates practical kl penalties / trust regions / ppo clipping instead.
 
 pi_{k+1} = argmax_{pi'} [ L_{pi_k}(pi') - C_q * KL ] => J(pi_{k+1}) >= J(pi_k) style argument when optimizing exactly.
 
@@ -1176,7 +1176,7 @@ input: demos tau from expert pi* (state-action trajectories). often no reward gi
 
 behavior cloning (bc):
 
-learn pi_theta(a|s) by supervised learning on pairs (s,a) from expert data — same as classification / regression over actions.
+learn pi_theta(a|s) by supervised learning on pairs (s,a) from expert data, same as classification / regression over actions.
 
 pseudocode:
 
@@ -1186,7 +1186,7 @@ train pi_theta to minimize loss(s,a) e.g. cross-entropy or mse for continuous ac
 deploy pi_theta
 ```
 
-problem: distribution shift — train states ~ d^{pi*}, test states ~ d^{pi_theta}. small per-step error epsilon compounds over horizon (errors feed wrong states). intuition: total failure modes can grow worse than epsilon*T (structured prediction issue).
+problem: distribution shift. train states ~ d^{pi*}, test states ~ d^{pi_theta}. small per-step error epsilon compounds over horizon (errors feed wrong states). intuition: total failure modes can grow worse than epsilon*T (structured prediction issue).
 
 dagger (dataset aggregation):
 
@@ -1231,7 +1231,7 @@ among distributions over paths matching demo feature counts, pick max entropy (l
 
 path probability ~ exp(w^T mu_tau) / Z(w)  (bolt distribution / exponential family style)
 
-learn w by maximizing likelihood of demos; gradient ~ empirical feature counts minus expected counts under model — needs dynamics (known model or sampling / simulation). bc did not need dynamics.
+learn w by maximizing likelihood of demos; gradient ~ empirical feature counts minus expected counts under model, which needs dynamics (known model or sampling / simulation). bc did not need dynamics.
 
 stochastic mdps: path likelihood includes transition noise; objective still feature-matching / likelihood ideas.
 

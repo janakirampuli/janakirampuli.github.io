@@ -15,7 +15,7 @@ permalink: /about/
       <div class="timeline__title">WarpBuild · Software Engineer</div>
       <div class="timeline__subtitle">Fast CI/CD · GitHub Actions Runners (YC S21)</div>
       <div class="timeline__desc">
-        Building high-performance CI/CD infrastructure — drop-in GitHub Actions runners that are faster and cheaper than the defaults — and Helios, an always-on AI automation assistant for software delivery.
+        Building high-performance CI/CD infrastructure (drop-in GitHub Actions runners that are faster and cheaper than the defaults) and Helios, an always-on AI automation assistant for software delivery.
       </div>
     </div>
   </div>

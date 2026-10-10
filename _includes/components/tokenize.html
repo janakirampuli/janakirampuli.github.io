@@ -1,0 +1,18 @@
+{%- comment -%}
+Animated tokenizer: text, pre-tokens, UTF-8 bytes, merges and token ids.
+The reader can change the text and the number of merges.
+
+Usage:
+  {% include components/tokenize.html text="the cat saw the hat 🙂<|endoftext|>" %}
+
+Optional: `merges` (number of merges to train, default 40), `specials` (special
+tokens with spaces between them) and `corpus` (training text for the vocabulary).
+{%- endcomment -%}
+<div class="ia-anim ia-tkz" data-tokenize
+  {%- if include.text %} data-text="{{ include.text | escape }}"{% endif -%}
+  {%- if include.merges %} data-merges="{{ include.merges }}"{% endif -%}
+  {%- if include.specials %} data-specials="{{ include.specials | escape }}"{% endif -%}
+  {%- if include.corpus %} data-corpus="{{ include.corpus | escape }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

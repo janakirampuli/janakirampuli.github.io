@@ -1,0 +1,11 @@
+{%- comment -%}
+Animated BPE training: pair counts, the selected pair and the merge, one step at a time.
+
+Usage:
+  {% include components/bpe-train.html words=" the:5| then:2| cat:3| hat:1" merges="6" %}
+
+`words` is a list of `word:count` items with `|` between them. Spaces are part of the word.
+{%- endcomment -%}
+<div class="ia-anim ia-bpe" data-bpe-train data-words="{{ include.words | escape }}" data-merges="{{ include.merges | default: 6 }}">
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

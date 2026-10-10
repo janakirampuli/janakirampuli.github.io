@@ -30,6 +30,8 @@ Each section shows the intended markup and how it renders. Components are design
 - [Side-by-side](#sidebyside)
 - [Math](#math)
 - [Stepper](#stepper)
+- [BPE training](#bpe-train)
+- [Tokenizer](#tokenize)
 - [Tables](#tables)
 - [References](#references)
 
@@ -387,6 +389,32 @@ This is the essence of any recurrent model - the state is the memory.
 
 ---
 
+<section class="ia-section" id="bpe-train" markdown="1">
+  <div class="ia-section__header">
+    <h2>BPE training</h2>
+  </div>
+
+An animated walk-through of byte-pair merges. Play it, step through it or drag the slider. Hover a pair to see where it occurs in the words.
+
+{% include components/bpe-train.html words=" low:5| lower:2| newest:6| widest:3" merges="8" %}
+
+</section>
+
+---
+
+<section class="ia-section" id="tokenize" markdown="1">
+  <div class="ia-section__header">
+    <h2>Tokenizer</h2>
+  </div>
+
+Text to token ids, one stage at a time. The vocabulary is trained in the page. The reader can change the text and the number of merges.
+
+{% include components/tokenize.html text="the cat saw the hat 🙂<|endoftext|>" %}
+
+</section>
+
+---
+
 <section class="ia-section" id="tables" markdown="1">
   <div class="ia-section__header">
     <h2>Tables</h2>
@@ -409,6 +437,8 @@ This is the essence of any recurrent model - the state is the memory.
 | Margin figure   | layout  | Small figure in gutter                     |
 | Side-by-side    | block   | 2-column, stacks below 900px               |
 | Stepper         | widget  | Prev/Next panels                           |
+| BPE training    | widget  | Animated merges, play / step / scrub       |
+| Tokenizer       | widget  | Editable text to token ids                 |
 
 </section>
 

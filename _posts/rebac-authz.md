@@ -6,9 +6,9 @@ tags: ["authz", "rebac", "cedar", "backend", "systems"]
 published: true
 ---
 
-Notes on relationship-based access control (ReBAC): how it handles sharing and permissions across resources, and how to build it on top of [Cedar](https://www.cedarpolicy.com/).
+These are notes on relationship-based access control (ReBAC). They show how ReBAC controls sharing and permissions across resources, and how to build it on [Cedar](https://www.cedarpolicy.com/).
 
-The [auth service post](/_posts/auth-service.html) covered authentication, which answers "who are you?". This one is about authorization: given who you are, can you do this action on this resource?
+The [auth service post](/_posts/auth-service.html) was about authentication, which answers "who are you?". This post is about authorization: when we know who you are, can you do this action on this resource?
 
 ```
 principal  +  action     +  resource              ->   allow / deny
@@ -16,7 +16,7 @@ principal  +  action     +  resource              ->   allow / deny
 alice      +  ViewPhoto  +  VacationPhoto94.jpg   ->   ?
 ```
 
-The examples use PhotoFlash, the photo-sharing app from the Cedar docs: users, groups, albums, and photos.
+The examples use PhotoFlash, the photo-sharing app from the Cedar docs. It has users, groups, albums, and photos.
 
 ## Contents
 
@@ -46,38 +46,38 @@ The examples use PhotoFlash, the photo-sharing app from the Cedar docs: users, g
 | model | the rule is | example |
 |---|---|---|
 | ACL (access control list) | a list attached to each object | `VacationPhoto94.jpg: {alice: view, bob: edit}` |
-| RBAC (role-based) | a role carries permissions, users hold roles | jane is `admin`, and `admin` can delete albums |
-| ABAC (attribute-based) | a condition over attributes | allow if `photo.sensitive == false` or `user.age >= 18` |
-| ReBAC (relationship-based) | a path through a graph of relationships | alice is in a group that can view the album this photo is in |
+| RBAC (role-based) | a role has permissions, and users have roles | jane is `admin`, and `admin` can delete albums |
+| ABAC (attribute-based) | a condition on attributes | allow if `photo.sensitive == false` or `user.age >= 18` |
+| ReBAC (relationship-based) | a path through a graph of relationships | alice is in a group that can view the album that contains this photo |
 
-ACLs are precise but grow one row per object per person. RBAC reduces that to a few role names. ABAC is the most expressive and the hardest to reason about, because the answer depends on attribute values that can change at any time. ReBAC is less expressive than ABAC, but the answer comes from relationships you already store.
+ACLs are precise, but they grow by one row for each object and each person. RBAC decreases that to a small number of role names. ABAC is the most expressive model and the most difficult to analyze, because the answer changes with attribute values that can change at any time. ReBAC is less expressive than ABAC, but the answer comes from relationships that you already keep.
 
 ---
 
 ## Where RBAC is not sufficient
 
-Say a photo club shares one account, with 30 albums and 4,000 photos. Jane wants alice to see the photos in her trips album and nothing else.
+For example, a photo club shares one account, with 30 albums and 4,000 photos. Jane wants alice to see the photos in her trips album and no other photos.
 
-Plain RBAC gives you global roles: if alice holds `viewer`, she can view every album in the club. So you scope the role to a resource, "alice is viewer on janeTrips". That works until:
+Plain RBAC gives you global roles. If alice has `viewer`, she can view each album in the club. Thus you limit the role to a resource: "alice is viewer on janeTrips". That works until one of these occurs:
 
-- Jane adds bob as a friend and wants him to see what her other friends see. That's a new row for every album she has shared with them.
-- Someone asks who can see a particular photo. You check the photo, then its album, then any account-wide shares, all by hand.
+- Jane adds bob as a friend and wants him to see what her other friends see. That is a new row for each album that she shared with them.
+- A person asks who can see a specified photo. You examine the photo, then its album, then the account-wide shares, all manually.
 
-RBAC doesn't know that a photo is inside an album, so "viewer on the album" only becomes "can view this photo" if you write that rule yourself, in every endpoint, for every resource type.
+RBAC does not know that a photo is in an album. Thus "viewer on the album" becomes "can view this photo" only if you write that rule yourself. You must write it in each endpoint, for each resource type.
 
 ---
 
 ## What ReBAC is
 
-In ReBAC you store relationships, and a permission check becomes a question about a graph: is there a path from this principal to this resource that allows this action?
+In ReBAC you keep relationships, and a permission check becomes a question about a graph. Is there a path from this principal to this resource that permits this action?
 
-Three kinds of edge cover most products:
+Three types of edge are sufficient for most products:
 
-1. A principal holds a role on a resource. This is the grant.
-2. A principal belongs to a group.
-3. A resource sits inside another resource.
+1. A principal has a role on a resource. This is the grant.
+2. A principal is a member of a group.
+3. A resource is inside a different resource.
 
-Back to alice:
+The alice example again:
 
 ```
 alice --member--> janeFriends --viewer--> janeTrips
@@ -86,56 +86,56 @@ alice --member--> janeFriends --viewer--> janeTrips
                                      VacationPhoto94.jpg
 ```
 
-Alice is in `janeFriends`, that group is `viewer` on `janeTrips`, and the photo is in `janeTrips`, so she can view it.
+Alice is in `janeFriends`, that group is `viewer` on `janeTrips`, and the photo is in `janeTrips`. Thus she can view it.
 
-Jane's share is a single grant, and it covers every photo in the album, including ones added later. Adding bob to the group gives him the same access without a new grant. The other two edges, group membership and which album a photo is in, are data the app keeps anyway.
+The share from Jane is one grant. It includes each photo in the album, and also the photos that are added later. When Jane adds bob to the group, he gets the same access without a new grant. The other two edges are group membership and the album of a photo. The app keeps this data in all cases.
 
-The idea comes from Google's [Zanzibar](https://research.google/pubs/pub48190/) paper (give it a read), which describes the system behind sharing in Drive, Photos, and YouTube.
+The idea comes from the [Zanzibar](https://research.google/pubs/pub48190/) paper from Google, which I recommend that you read. It describes the system that controls sharing in Drive, Photos, and YouTube.
 
 ---
 
 ## Roles
 
-Every grant carries a role. Roles are cumulative, so each one includes everything below it:
+Each grant has a role. Roles are cumulative, so each role includes all the roles below it:
 
 - `viewer` can see the resource.
 - `contributor` can also add to it: photos to an album, comments on a photo.
 - `editor` can also change it: rename the album, edit its photos.
-- `admin` has full control, including where each photo was taken.
+- `admin` has full control, which includes the location where each photo was taken.
 
-Each action is allowed from some minimum role upward: `ViewPhoto` from `viewer`, `EditPhoto` from `editor`.
+Each action is permitted from a minimum role and above: `ViewPhoto` from `viewer`, `EditPhoto` from `editor`.
 
-Creating something is checked against its container: adding a photo needs `contributor` on the album. You can't hold a role on something that doesn't exist yet.
+The check to create an item uses its container: to add a photo, you must have `contributor` on the album. You cannot have a role on an item that does not exist.
 
-Some actions aren't about any one resource, like creating an album or managing groups. Those stay plain RBAC, with account-wide roles such as admin and member. A grant never gives an account role: being admin of one album doesn't let you create groups.
+Some actions do not apply to one resource, such as to create an album or to manage groups. Those stay plain RBAC, with account-wide roles such as admin and member. A grant does not give an account role: the admin of one album cannot create groups.
 
 ---
 
 ## Hierarchy and inheritance
 
-Access flows down the "sits inside" edges, so choosing a resource's parent is the main decision when you add a resource type. An album's parent is its account. A photo's parents are the albums it's in, and there can be several, since the same photo can be in Trips and Favorites.
+Access goes down the "is inside" edges. Thus the parent of a resource is the primary decision when you add a resource type. The parent of an album is its account. The parents of a photo are the albums that contain it. There can be more than one, because the same photo can be in Trips and Favorites.
 
-A fresh upload sits in its owner's library until someone puts it in an album. If it inherited from the account, every upload would be visible to the whole club the moment it landed. So it has no parent at all, and its owner gets access from a built-in rule that doesn't need a grant.
+A new upload stays in the library of its owner until a person puts it in an album. If it inherited from the account, the full club could see each upload immediately. Thus it has no parent, and its owner gets access from a built-in rule that does not need a grant.
 
 ---
 
 ## Choosing an engine
 
-Two kinds of policy engine can walk the graph and answer the question.
+Two types of policy engine can go through the graph and answer the question.
 
-Zanzibar-style services such as [OpenFGA](https://openfga.dev) and [SpiceDB](https://authzed.com/spicedb) own both the data and the evaluation. You write relationships into them and ask "can alice view VacationPhoto94.jpg?". They also answer the harder question, "what can alice reach?", directly. The cost is a second service on the request path, and a second copy of your relationships that has to stay in sync with your database.
+Zanzibar-style services such as [OpenFGA](https://openfga.dev) and [SpiceDB](https://authzed.com/spicedb) own the data and the evaluation. You write relationships into them and ask "can alice view VacationPhoto94.jpg?". They also directly answer the more difficult question, "what can alice reach?". The cost is a second service on the request path. There is also a second copy of your relationships, which must stay in sync with your database.
 
-[Cedar](https://www.cedarpolicy.com/) is a policy language from AWS plus an evaluator, shipped as a Rust library with WASM bindings. It runs in-process and stores nothing: you pass it the policies, the entities involved, and the request, and it answers. [AWS Verified Permissions](https://aws.amazon.com/verified-permissions/) is the hosted version.
+[Cedar](https://www.cedarpolicy.com/) is a policy language from AWS with an evaluator. It comes as a Rust library with WASM bindings. It runs in-process and keeps no data: you give it the policies, the related entities, and the request, and it answers. [AWS Verified Permissions](https://aws.amazon.com/verified-permissions/) is the hosted version.
 
-This blog post uses Cedar. Grants live in the same database as the resources they're about, so a resource and its first grant go to one database instead of two systems that can fail separately.
+This blog post uses Cedar. Grants are in the same database as their resources. Thus a resource and its first grant go to one database, not to two systems that can fail independently.
 
-The trade-off is that you load the relevant relationships yourself before each decision, and you write the "what can alice reach?" query by hand.
+The trade-off is that you must load the related relationships yourself before each decision. You must also write the "what can alice reach?" query manually.
 
 ---
 
 ## Defining the schema
 
-The schema tells Cedar what kinds of entities exist, what can contain what, and which actions apply to which types. In Cedar's schema language:
+The schema tells Cedar which types of entities exist, which entity can contain which, and which actions apply to which types. In the Cedar schema language:
 
 ```
 entity Account;
@@ -148,15 +148,15 @@ action ViewAlbum, RenameAlbum appliesTo { principal: User, resource: Album };
 action ViewPhoto, EditPhoto   appliesTo { principal: User, resource: Photo };
 ```
 
-`in` declares the hierarchy: a user can be a member of groups and of an account, and a photo can sit in albums. These are the membership and "sits inside" edges of the graph. `appliesTo` says which principal and resource types each action takes, and Cedar's validator uses it to reject a policy that allows `RenameAlbum` on a photo.
+`in` declares the hierarchy: a user can be a member of groups and of an account, and a photo can be in albums. These are the membership edges and the "is inside" edges of the graph. `appliesTo` gives the principal type and the resource type of each action. The Cedar validator uses it to reject a policy that permits `RenameAlbum` on a photo.
 
-In practice every entity also carries an `accountId`, and every user their account-wide role, for the built-in rules below. They're left out here to keep it short.
+In practice, each entity also has an `accountId`, and each user has an account-wide role, for the built-in rules below. They are not shown here, to keep the example short.
 
 ---
 
 ## Writing policies
 
-A policy says who can do what, on which resources. Jane's share, written by hand, would be:
+A policy says who can do what, on which resources. The share from Jane, written manually, is:
 
 ```
 permit(
@@ -166,7 +166,7 @@ permit(
 );
 ```
 
-Writing one of these for every share would mean a policy per grant row. Instead, each role gets one template: the same policy with placeholders.
+If you write one of these for each share, you get one policy for each grant row. As an alternative, each role gets one template, which is the same policy with placeholders.
 
 ```
 permit(
@@ -176,20 +176,20 @@ permit(
 );
 ```
 
-This is the `viewer` template; the other roles' templates differ only in their action lists. At request time each relevant grant links the template to its own principal and resource, so jane's grant row turns it back into the first policy.
+This is the `viewer` template. The templates of the other roles are different only in their action lists. At request time, each related grant links the template to its own principal and resource. Thus the grant row from Jane changes it back into the first policy.
 
-All of the inheritance comes from `in`, which matches the named entity or anything under it:
+All the inheritance comes from `in`, which matches the named entity or an entity below it:
 
-- `principal in ?principal`: a grant to `janeFriends` covers every member of the group.
-- `resource in ?resource`: a grant on `janeTrips` covers every photo inside it.
+- `principal in ?principal`: a grant to `janeFriends` includes each member of the group.
+- `resource in ?resource`: a grant on `janeTrips` includes each photo in it.
 
-Besides the role templates, a few built-in policies don't come from grants: the owner rule from earlier, permits for the account-wide roles, and the tenant boundary below.
+In addition to the role templates, some built-in policies do not come from grants. These are the owner rule from the hierarchy section, the permits for the account-wide roles, and the tenant boundary below.
 
 ---
 
 ## Guardrails with forbid
 
-The tenant boundary keeps every request inside one account, and it's a `forbid`:
+The tenant boundary keeps each request in one account, and it is a `forbid`:
 
 ```
 forbid(principal, action, resource)
@@ -197,21 +197,21 @@ unless { principal has accountId && resource has accountId
          && principal.accountId == resource.accountId };
 ```
 
-Cedar decides in a fixed order: if any `forbid` matches, the answer is deny; otherwise it's allow only if some `permit` matches.
+Cedar makes its decision in a fixed order. If a `forbid` matches, the answer is deny. If not, the answer is allow only if a `permit` matches.
 
-The `has` checks are there because of how Cedar handles errors. A policy that errors, for example by reading an attribute that isn't there, is skipped instead of counting as a deny. For a `permit` that's harmless. For a `forbid`, the guardrail silently switches off. With the `has` checks, a missing account id makes the forbid match instead of erroring.
+The `has` checks are necessary because of how Cedar handles errors. A policy can cause an error, for example when it reads an attribute that does not exist. Cedar ignores that policy and does not count it as a deny. For a `permit`, this has no bad effect. For a `forbid`, the guardrail goes off without a message. With the `has` checks, a missing account id makes the forbid match, and no error occurs.
 
 ---
 
 ## Evaluating a request
 
-A route declares the action it needs, like `ViewPhoto` on a photo. Before calling Cedar, the server loads only the part of the graph that could matter:
+A route declares the action that it needs, such as `ViewPhoto` on a photo. Before the call to Cedar, the server loads only the part of the graph that can be important:
 
-1. the caller's groups,
-2. the resource's ancestors (for a photo, its albums),
-3. unexpired grants held by the caller, their groups, or the account, on the resource or its ancestors.
+1. the groups of the caller,
+2. the ancestors of the resource (for a photo, its albums),
+3. the unexpired grants on the resource or its ancestors that belong to the caller, their groups, or the account.
 
-The grants table can be large, but a check only loads a handful of rows from it. Those rows become Cedar's three inputs. For alice:
+The grants table can be large, but a check loads only a small number of rows from it. Those rows become the three inputs of Cedar. For alice:
 
 ```
 request    User::"alice", Action::"ViewPhoto", Photo::"VacationPhoto94.jpg"
@@ -225,49 +225,49 @@ policies   viewer template linked to (Group::"janeFriends", Album::"janeTrips")
            built-in policies
 ```
 
-Cedar then evaluates every policy against the request:
+Cedar then evaluates each policy against the request:
 
-- The tenant boundary doesn't match, because alice and the photo are in the same account.
+- The tenant boundary does not match, because alice and the photo are in the same account.
 - The viewer link matches: alice is in `janeFriends`, `ViewPhoto` is in the viewer action list, and the photo is in `janeTrips`.
 
-No forbid matched and a permit did, so the decision is allow. Along with the decision, Cedar returns the policies that decided it and any errors. Logging the deciding policies tells you which rule denied a request, such as the tenant boundary.
+No forbid matched and a permit matched, so the decision is allow. Together with the decision, Cedar returns the policies that made the decision and the errors, if there are any. If you log these policies, you can see which rule denied a request, such as the tenant boundary.
 
 ---
 
 ## Listing what someone can see
 
-A check answers one question about one resource. A list page can't run it on every photo in the account and throw most away, so listing works in the other direction:
+A check answers one question about one resource. A list page cannot run the check on each photo in the account and discard most of them. Thus a list works in the opposite direction:
 
-1. Load every unexpired grant the caller holds, directly or through a group or the account.
-2. Expand each grant down the hierarchy: a grant on an album covers the photos in it.
-3. Where more than one path reaches the same photo, keep the highest role.
+1. Load each unexpired grant that the caller has, directly or through a group or the account.
+2. Expand each grant down the hierarchy: a grant on an album includes the photos in it.
+3. If more than one path goes to the same photo, keep the highest role.
 
-A direct `viewer` grant on a photo in an album the caller can edit comes out as `editor`. The role comes back with each id, so the grid can show or hide each photo's edit and share buttons without another round trip.
+For example, the caller has a direct `viewer` grant on a photo, and the photo is in an album that the caller can edit. The result for that photo is `editor`. Each id comes back with its role. Thus the grid can show or hide the edit and share buttons of each photo without a second request.
 
 ---
 
 ## Sharing
 
-Sharing creates or updates a grant: a principal, a resource, a role, and optionally an expiry. The principal can be a user, a group, or everyone in the account. Expired grants are skipped when grants are loaded, so temporary access ends without a cleanup job.
+A share creates or updates a grant: a principal, a resource, a role, and an optional expiry. The principal can be a user, a group, or all the users in the account. The code ignores expired grants when it loads grants, so temporary access stops without a cleanup job.
 
-Sharing is itself an action, so it goes through the same check as everything else. Apps usually allow it for editors, sometimes only for admins, and viewers can't reshare. Two more rules are common:
+A share is also an action, so it goes through the same check as all other actions. Apps usually permit it for editors and sometimes only for admins. Viewers cannot share again. Two more rules are common:
 
-- You can't give anyone a higher role than your own.
-- A resource always keeps at least one admin, so the last one can't be removed or downgraded.
+- You cannot give a person a role higher than your own.
+- A resource always keeps a minimum of one admin. Thus the last admin cannot be removed or given a lower role.
 
 ---
 
 ## Adding a new resource type
 
-Say you're adding slideshows, which live inside albums:
+For example, you add slideshows, which are in albums:
 
-1. Add `entity Slideshow in [Album]` to the schema, with an `accountId` like every other entity.
-2. Declare its actions and add each to the role that allows it: `ViewSlideshow` to `viewer`, `EditSlideshow` to `editor`. Creating one is an action on the album, like adding a photo.
-3. Make sure the code that loads a resource's ancestors can find a slideshow's album.
-4. Protect its routes with the actions they need.
-5. When a slideshow is created, write the creator's `admin` grant and its link to the album.
+1. Add `entity Slideshow in [Album]` to the schema, with an `accountId` as for all other entities.
+2. Declare its actions and add each action to the role that permits it: `ViewSlideshow` to `viewer`, `EditSlideshow` to `editor`. To create a slideshow is an action on the album, the same as to add a photo.
+3. Make sure that the code that loads the ancestors of a resource can find the album of a slideshow.
+4. Protect its routes with the actions that they need.
+5. When a slideshow is created, write the `admin` grant of the creator and the link to the album.
 
-No new policies are needed here: slideshows inherit access through `in`, like photos do.
+New policies are not necessary here. Slideshows inherit access through `in`, as photos do.
 
 ---
 

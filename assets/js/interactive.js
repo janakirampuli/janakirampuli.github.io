@@ -359,3 +359,14 @@ function enhanceBackToTop() {
 }
 
 enhanceBackToTop();
+
+/* -----------------------------
+ * Tokenizer diagrams
+ * -----------------------------
+   The code is in its own file. It loads only on pages that use a diagram.
+*/
+if (document.querySelector('[data-bpe-train], [data-tokenize]')) {
+  import('./tokenizer-viz.js').catch((e) => {
+    console.error('Tokenizer diagrams failed', e);
+  });
+}

@@ -9,7 +9,8 @@ permalink: /projects/
 
   {%- assign date_format = "%b %-d, %Y" -%}
   <ul class="post-list">
-    {%- for project in site.data.projects -%}
+    {%- assign visible_projects = site.data.projects | where_exp: "project", "project.published != false" -%}
+    {%- for project in visible_projects -%}
       <li>
         <span class="post-meta">{{ project.date | date: date_format }}</span>
         <h3>
