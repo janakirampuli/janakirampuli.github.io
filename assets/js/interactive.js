@@ -72,9 +72,17 @@ function enhanceTabs(root = document) {
 function enhanceCodeCopy(root = document) {
   const pres = root.querySelectorAll('pre');
   for (const pre of pres) {
-    // Skip poems and any pre that already has a copy
+    // Skip poems, mermaid sources, and any pre that already has a copy
     if (pre.classList.contains('poem')) continue;
-    if (pre.querySelector('.ia-copy')) continue;
+    if (pre.querySelector('code.language-mermaid')) continue;
+    if (pre.parentElement.classList.contains('ia-code')) continue;
+    // Opt out with `{: .no-copy}` after a code block, or `code_copy: false` in the page front matter
+    if (pre.closest('.no-copy')) continue;
+
+    // The button sits on a wrapper, not inside the pre, so it stays in place when the pre scrolls
+    const wrap = el('div', { class: 'ia-code' });
+    pre.replaceWith(wrap);
+    wrap.appendChild(pre);
 
     const code = pre.querySelector('code') || pre;
     const btn = el('button', { class: 'ia-copy', type: 'button', title: 'Copy code' }, 'Copy');
@@ -89,7 +97,7 @@ function enhanceCodeCopy(root = document) {
         setTimeout(() => (btn.textContent = 'Copy'), 900);
       }
     });
-    pre.appendChild(btn);
+    wrap.appendChild(btn);
   }
 }
 

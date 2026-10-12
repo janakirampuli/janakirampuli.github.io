@@ -2,7 +2,7 @@
 layout: default
 title: Training an LLM from scratch
 permalink: /projects/llm-from-scratch/
-published: true
+published: false
 ---
 
 <div class="projects-page">

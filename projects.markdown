@@ -2,6 +2,7 @@
 layout: default
 title: Projects
 permalink: /projects/
+published: false
 ---
 
 <div class="projects-page">

@@ -102,7 +102,7 @@
     </header>
 
     <div class="container">
-      <section id="main_content">
+      <section id="main_content"{% if page.code_copy == false %} class="no-copy"{% endif %}>
         {{ content }}
       </section>
     </div>

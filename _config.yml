@@ -35,8 +35,10 @@ nav:
     url: /blog/
   - title: Notes
     url: /notes/
-  - title: Projects
-    url: /projects/
+  # Hidden until there are projects to show. To restore, uncomment this entry
+  # and set `published: true` in projects.markdown and projects/*.markdown.
+  # - title: Projects
+  #   url: /projects/
   - title: Resume
     url: /resume/
 

@@ -156,6 +156,13 @@ fn main() {
 }
 ```
 
+To hide the copy button on one block, put `{: .no-copy}` on the line after the block. To hide it on a whole page, set `code_copy: false` in the front matter.
+
+```text
+alice --member--> janeFriends
+```
+{: .no-copy}
+
 </section>
 
 ---

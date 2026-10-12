@@ -352,7 +352,7 @@ function buildTrainer(root) {
     )));
     if (picking) mark(m.a, m.b, 'is-pick');
 
-    mergesLabel.textContent = `Merges · vocabulary ${BASE_VOCAB} + ${done} = ${BASE_VOCAB + done}`;
+    mergesLabel.textContent = `Merges (vocabulary ${BASE_VOCAB} + ${done} = ${BASE_VOCAB + done})`;
     mergesBox.replaceChildren(...merges.slice(0, done).map((x, i) => el(
       'span',
       { class: `ia-bpe__merge${merged && i === done - 1 ? ' is-new' : ''}` },

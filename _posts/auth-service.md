@@ -6,21 +6,21 @@ tags: ["auth", "backend", "systems"]
 published: true
 ---
 
-This post tells how I built our auth service. It gives the requirements, the things that I learned, and how [better-auth](https://better-auth.com) made the implementation easy.
+I built our auth service on [better-auth](https://better-auth.com), which is a TypeScript auth library that we host ourselves. Users get sessions that are stored in our database, and services get short-lived signed tokens that other services verify without calling the auth service. This post gives the requirements, explains the concepts that I had to learn, and shows how better-auth covers each requirement.
 
 ## Contents
 
 <div class="ia-toc" markdown="1">
 
-- [Two kinds of auth](#two-kinds-of-auth)
+- [User authentication and service authentication](#user-authentication-and-service-authentication)
 - [Requirements](#requirements)
 - [Authenticating a request](#authenticating-a-request)
 - [Sessions, JWTs, cookies, and revocation](#sessions-jwts-cookies-and-revocation)
 - [better-auth](#better-auth)
 - [better-auth plugins](#better-auth-plugins)
-- [Multi-tenancy and RBAC: orgs, roles, permissions](#multi-tenancy-and-rbac-orgs-roles-permissions)
-- [Login methods: OAuth, SSO, SCIM](#login-methods-oauth-sso-scim)
-- [Architecture: how everything talks to auth](#architecture-how-everything-talks-to-auth)
+- [Organizations, roles, and permissions](#organizations-roles-and-permissions)
+- [Login methods with OAuth, SSO, and SCIM](#login-methods-with-oauth-sso-and-scim)
+- [How users and services call the auth service](#how-users-and-services-call-the-auth-service)
 - [API keys](#api-keys)
 - [References](#references)
 
@@ -28,89 +28,95 @@ This post tells how I built our auth service. It gives the requirements, the thi
 
 ---
 
-## Two kinds of auth
+## User authentication and service authentication
 
-- **Human auth** - A person opens the web app or the mobile app and proves their identity (password, Google login, or the SSO of their company). Then the person gets a session.
-- **Machine auth** - A backend service must call a different service, or call auth itself, and no person is involved. The service must also have an identity and an authorization.
+An auth service has to identify users, and it also has to identify services.
+
+User authentication happens when a person opens the web app or the mobile app and proves their identity with a password, a Google login, or their company's login system. The auth service then gives the user a session.
+
+Service authentication happens when a backend service calls another service, or calls the auth service itself, and no user is involved. The service also needs an identity and a set of permissions.
 
 ---
 
 ## Requirements
 
-- **Users can log in from web and mobile.** One identity, more than one client.
-- **Authenticate and authorize users.** Each request has two questions: "are you logged in?" and "can you do this?"
-- **Multi-tenancy: users belong to organizations.** A user can be a member of more than one org. The session contains an active organization, which is the org in which the user works at that time. All the permission checks use that org as context.
-- **Role-based access control (RBAC) in an org.** An org has roles (owner, admin, member, …). Your role in the active org controls what you can do. The same person can be an owner in one org and a viewer in a different org.
-- **API keys.** Programmatic access that has no relation to a browser session. It is for users who write scripts for the API and for integrations.
-- **Services can call auth.** A backend service can get a token and verify a token, and no person is involved.
-- **Enterprise login methods.** OAuth (social login), SSO (enterprise identity providers), and SCIM (automated user provisioning/deprovisioning).
+The auth service had to meet the following requirements.
+
+- Login
+  - Users can log in from the web app and the mobile app with one identity.
+  - Enterprise customers can use OAuth (social login), SSO (login through the company's identity provider), and SCIM (automatic creation and removal of users).
+- Authorization
+  - Each request is authenticated and authorized, which means that the server checks whether the caller is logged in and whether the caller can do the action.
+  - Users belong to organizations, and a user can be a member of more than one organization. The session contains an active organization, which is the organization that the user is working in at the time, and every permission check uses the active organization.
+  - Each organization has roles, e.g., owner, admin, and member, and a user's role in the active organization controls what the user can do. The same person can be an owner in one organization and a viewer in another. The model is called role-based access control (RBAC).
+- Access without a browser
+  - Users can create API keys for scripts and integrations, and an API key isn't tied to a browser session.
+  - A backend service can get a token and verify a token when no user is involved.
 
 ---
 
 ## Authenticating a request
 
-An auth service answers one question on each request: who makes this call, and do they have permission to do it?
+On each request, the auth service has to find out who is making the call and whether they have permission to make it.
 
-An HTTP request is anonymous by default, so the client must attach proof of identity. There are two types of proof:
+An HTTP request is anonymous by default, so the client must attach proof of identity. The proof is either a bearer token or a session cookie.
 
-- **A bearer token** - The client sends it in a header on each request:
+A bearer token is a string that the client sends in a header on each request.
 
-  ```
-  Authorization: Bearer <token>
-  ```
+```
+Authorization: Bearer <token>
+```
+{: .no-copy}
 
-  The token is the credential. The server treats each person who holds ("bears") the token as that user. Mobile apps and backend services use this type.
+The token is the credential, so the server treats anyone who holds the token as that user. Mobile apps and backend services use bearer tokens.
 
-- **A session cookie** - After login, the server sets a cookie, and the browser automatically attaches it to each subsequent request. The cookie contains the credential or points to it. The web app uses this type.
+A session cookie is a cookie that the server sets after login, and the browser attaches it to each later request automatically. The cookie either contains the credential or contains an id that points to it. The web app uses a session cookie.
 
-For the two types, the server does the same two things on each request.
+The server does the same two checks on each request, whichever proof the client sends. First, authentication finds out who the caller is. The server reads the token or the cookie from the request and checks that it is valid, and then it finds the user or the service that it identifies. Second, authorization finds out what the caller can do. The server looks up the roles and permissions of the caller in the active organization before it permits the action.
 
-- **Authentication (authN)** - Who are you? Get the token or the cookie from the request, make sure that it is valid, and find the user (or the service) that it identifies.
-- **Authorization (authZ)** - What can you do? For that identity, examine its roles and permissions in the active org before you permit the action.
-
-AuthN does not occur only one time at login. You enter your password or log in with Google one time. But the server must also check each subsequent request. That check is cheaper: the server reads the token, or finds the session by its id if the auth uses sessions. AuthZ runs on each protected action ("can this user delete this resource in this org?").
+Authentication happens on every request, and login is only the first time. A user enters a password or logs in with Google once, and the server still has to check each later request. The later check is cheaper, because the server only reads the token or looks up the session by its id. Authorization runs on each protected action, e.g., when a user tries to delete a resource in an organization.
 
 ---
 
 ## Sessions, JWTs, cookies, and revocation
 
-Sessions (stateful) - The server makes an opaque session id, keeps the session in a database, and gives the id to the client. Each request causes a lookup of the session.
+Sessions and JWTs are the two common ways to keep a caller logged in, and they differ mainly in how quickly you can revoke access.
 
-- Revocation is easy. Delete the row and the session stops immediately.
-- The cost is a lookup (usually in a DB or a cache) on each request. Each service that verifies a session must have access to that store.
+With sessions, the server creates a random session id and stores the session in a database. The server gives the id to the client, and it looks up the session on each request. Sessions are stateful, which means that the server stores them. Revocation is easy, because the session stops working as soon as you delete its row. The cost is a lookup on each request, usually in a database or a cache, and each service that verifies a session needs access to that store.
 
-JWTs (stateless) - A JWT is a signed token that contains the claims (user id, active org, roles, expiry). Each service that has the public key can verify it without a call to auth.
+A JWT (JSON Web Token) is a signed token that contains claims, e.g., the user id, the active organization, the roles, and the expiry time. JWTs are stateless, which means that the server doesn't store them. Any service that has the public key can verify a JWT without calling the auth service. JWTs suit high traffic and service-to-service calls, because there is no shared session store and verification is a local signature check. Revocation isn't immediate, because a JWT stays valid until it expires and no service asks the auth service about it. So you keep the lifetime short, usually 10 to 15 minutes, and you issue a new JWT when the old one expires.
 
-- JWTs are good for scale and for machine-to-machine calls. There is no shared session store, and verification is a local signature check.
-- Revocation is not immediate. A JWT stays valid until it expires. No service has to call auth to check it. That is the purpose of a JWT, and it is also why you cannot cancel one early. Thus you keep the lifetime short, usually 10 to 15 minutes, and make a new JWT when the old one expires.
+A cookie is a way to carry a token, and it works with either approach. The web app keeps the token in a cookie with the httpOnly, Secure, and SameSite attributes, so JavaScript on the page can't read it. The httpOnly attribute stops a script that an attacker injected into the page from stealing the token, and the attack is called cross-site scripting (XSS). You still have to defend against cross-site request forgery (CSRF), in which another site makes the browser send a request with the user's cookie. Mobile calls and service-to-service calls send the same token in an `Authorization: Bearer` header.
 
-A cookie is only a method to carry the token. It is not a different approach. The web app keeps the token in an httpOnly, Secure, SameSite cookie, so JavaScript cannot read it. This prevents token theft through XSS, but you must still prevent CSRF. Mobile calls and service-to-service calls send the same token in an `Authorization: Bearer` header.
+I use sessions for users, and I use JWTs for services and for calls between services.
 
-Thus I divided it as follows:
+better-auth keeps each user session in our database, so a logout, a "sign out everywhere" action, and a password change take effect immediately. A session lasts 7 days. Once a session is more than one day old, each use moves the expiry forward again. We don't need a separate refresh token, because using the session extends it.
 
-- **Sessions for humans.** better-auth keeps the session in our database. Thus a logout, "sign out everywhere," and a password change all have an immediate effect. The expiry moves forward automatically. A session has a lifetime of 7 days. When the session is more than one day old, each use moves the expiry forward again. There is no separate refresh token to monitor, because the session is the refresh.
-- **JWTs for machines and cross-service calls.** When a request goes across a service boundary, it carries a short-lived JWT, and the receiving service verifies it locally. We make one from the session with `authClient.token()`, keep it, and attach it to outgoing calls. Its lifetime is 15 minutes. Thus we make a new one at intervals of some minutes, and also when a call returns a 401.
+A request that crosses a service boundary carries a short-lived JWT, and the receiving service verifies the JWT locally. We create the JWT from the session with `authClient.token()` and attach it to outgoing calls. The JWT lasts 15 minutes, so we create a new one every few minutes, and also when a call returns a 401 response.
 
 ---
 
 ## better-auth
 
-I used [better-auth](https://better-auth.com) for this. It is a TypeScript-native auth library that you host fully yourself. It owns tables in our database and runs in our backend, and all the user data stays with us. Vercel [acquired the team](https://vercel.com/blog/vercel-acquires-better-auth) recently :)
+I used [better-auth](https://better-auth.com) for the implementation. better-auth is a TypeScript auth library that you host yourself. It creates its tables in our database and runs in our backend, so all the user data stays with us. Vercel recently [acquired the team](https://vercel.com/blog/vercel-acquires-better-auth).
 
-The core gives you email/password and sessions. All other functions are plugins. Each plugin brings its own database schema, server routes, and an applicable client helper. The plugins that I used agree almost one-to-one with the requirements above:
+The core of better-auth provides email and password login and sessions, and every other feature is a plugin. Each plugin adds its own database schema, server routes, and client helper. The plugins that I used match the requirements almost one for one.
 
-- `organization()` - orgs, members, invitations, roles, and the active organization.
-- `apiKey()` - to issue, hash, and verify API keys.
-- `jwt()` - to issue JWTs and supply a JWKS endpoint, so other services can verify tokens locally.
-- `sso()` - enterprise SSO through OIDC/SAML.
-- `scim()` - enterprise SCIM for directory sync.
-- `admin()` - impersonation, user management, and access-control primitives.
+- Organizations and access control
+  - `organization()` adds organizations, members, invitations, roles, and the active organization.
+  - `admin()` adds impersonation, user management, and access control functions.
+- Tokens and keys
+  - `apiKey()` issues, hashes, and verifies API keys.
+  - `jwt()` issues JWTs and serves a JWKS endpoint, which publishes the public keys that other services use to verify tokens locally.
+- Enterprise login
+  - `sso()` adds enterprise SSO through the OIDC or SAML protocol.
+  - `scim()` adds SCIM, which syncs our user list with a customer's directory.
 
 ---
 
 ## better-auth plugins
 
-The core setup is small. You make the auth instance from plugins:
+The core setup is small, because you build the auth instance from a list of plugins.
 
 ```ts
 import { betterAuth } from "better-auth";
@@ -135,7 +141,7 @@ export const auth = betterAuth({
 });
 ```
 
-On the client, each server plugin has a related client plugin. Thus the methods that it adds have full types:
+On the client, each server plugin has a matching client plugin, so the methods that the plugin adds are fully typed.
 
 ```ts
 import { createAuthClient } from "better-auth/client";
@@ -156,17 +162,17 @@ await authClient.signIn.social({ provider: "google" });
 
 ---
 
-## Multi-tenancy and RBAC: orgs, roles, permissions
+## Organizations, roles, and permissions
 
-We needed role-based access control. You do not give permissions to users. You give permissions to roles, then you put users in roles. To change what an admin can do, you edit one role. You do not have to update each user row.
+We needed role-based access control, in which you give permissions to roles and then put users in roles. To change what an admin can do, you edit one role, and you don't have to update each user row.
 
-It has three layers.
+Role-based access control is built from permissions, roles, and memberships.
 
-1. **Permissions.** The smallest unit. Each permission is a resource and an action: `project:delete`, `member:invite`, ...
-2. **Roles.** Named groups of permissions: `member`, `admin`, `owner`.
-3. **Membership.** The link between a user and a role.
+1. A permission is the smallest unit. Each permission is a resource and an action, e.g., `project:delete` or `member:invite`.
+2. A role is a named group of permissions, e.g., `member`, `admin`, or `owner`.
+3. A membership links a user to a role in one organization.
 
-A user does not get a global role. A user gets a role in each organization.
+A user gets a separate role in each organization, and there is no global role.
 
 ```ts
 // a user can belong to many orgs; switching sets the active one on the session
@@ -179,7 +185,7 @@ await authClient.organization.inviteMember({
 });
 ```
 
-This code defines the permissions and the roles that use them:
+The following code defines the permissions and the roles that use them.
 
 ```ts
 import { createAccessControl } from "better-auth/plugins/access";
@@ -205,13 +211,13 @@ const owner = ac.newRole({
 });
 ```
 
-Then give those roles to the plugin. If you do not, the plugin uses its own built-in roles:
+Then you pass the roles to the plugin. If you don't, the plugin uses its built-in roles.
 
 ```ts
 organization({ ac, roles: { member, admin, owner } })
 ```
 
-A permission check then looks like this. You do not need `if (user.role === "admin")` in many locations in the codebase:
+A permission check then looks like the following code, and you don't need `if (user.role === "admin")` checks spread across the codebase.
 
 ```ts
 const { success } = await auth.api.hasPermission({
@@ -220,15 +226,15 @@ const { success } = await auth.api.hasPermission({
 });
 ```
 
-Roles are made from small permissions, not from hard-coded strings. Thus a new capability is a one-line change in one location.
+Roles are built from small permissions instead of hard-coded strings, so adding a new capability is a one-line change in one place.
 
 ---
 
-## Login methods: OAuth, SSO, SCIM
+## Login methods with OAuth, SSO, and SCIM
 
-OAuth (social login) - "Sign in with Google/GitHub." We send the user to the provider. The user gives approval and comes back with an authorization code, which we exchange for their profile. PKCE prevents theft of that code on public clients such as mobile apps. better-auth does the flow.
+OAuth is the protocol behind social login, e.g., "Sign in with Google". We send the user to the provider, and the user approves the login. The provider sends the user back with an authorization code, which we exchange for the user's profile. PKCE (Proof Key for Code Exchange) is an extension that stops an attacker from using a stolen code, and it is needed on public clients such as mobile apps. better-auth handles the whole flow.
 
-SSO (enterprise identity) - When you sell to companies, they want their employees to log in through their own identity provider (Okta, Entra, Google Workspace) with OIDC or SAML. The IT team of the customer controls access, and the email domain selects the login.
+SSO (single sign-on) lets a company's employees log in through the company's own identity provider, e.g., Okta, Entra, or Google Workspace. An identity provider is the system that stores a company's user accounts. Companies ask for SSO when they buy the product, and SSO uses the OIDC or SAML protocol. The customer's IT team controls who has access, and the user's email domain decides which identity provider handles the login.
 
 ```ts
 // register a customer's identity provider, keyed to their domain
@@ -242,25 +248,25 @@ await auth.api.registerSSOProvider({
 });
 ```
 
-SCIM (provisioning) - SSO lets people in, and SCIM keeps the user list in sync. When a large company starts to use the product, it does not want to invite users one at a time. And when a person leaves the company, their access must be removed everywhere automatically. SCIM is a standard REST protocol. The IdP of the company calls it to create, update, and deactivate users in our system. It is the feature for "a person was dismissed on Friday and must have no access by Friday". A SCIM deprovision event marks the member as inactive and revokes their sessions immediately.
+SCIM (System for Cross-domain Identity Management) keeps our user list in sync with the customer's identity provider. A large company doesn't want to invite users one at a time, and it wants access removed automatically when a person leaves. SCIM is a standard REST protocol, and the customer's identity provider calls it to create, update, and deactivate users in our system. For example, if a person leaves the company on Friday, their access should end on Friday. When we receive a SCIM request to deactivate a user, we mark the member as inactive and revoke their sessions immediately.
 
 ---
 
-## Architecture: how everything talks to auth
+## How users and services call the auth service
 
-1. **User → auth.** A person logs in and gets a session (a cookie on web, a bearer token on mobile).
-2. **Service → auth.** A backend service logs in as itself (client-credentials style) to get a short-lived token. This is for calls that have no user, such as a cron job or an internal job runner.
-3. **Service → service.** One service calls a different service and passes the token. The receiving service must verify it.
+The auth service issues every token, and the other services verify tokens themselves without calling it.
 
-The simple version of #3 is very bad: each service calls auth on each request to ask "is this token valid?". Then auth is in front of 100% of the traffic, and its latency is added to each request. If auth stops, all services stop.
+Tokens move between users, services, and the auth service in the following ways. First, a user logs in to the auth service and gets a session, which is a cookie on the web app and a bearer token on the mobile app. Second, a backend service logs in as itself with its own client id and secret, in the style of the OAuth client credentials flow, and gets a short-lived token. Services do so for calls that have no user, such as a cron job or an internal job runner. Third, one service calls another service and passes the token, and the receiving service must verify it.
 
-The solution is to issue tokens in one location but verify them everywhere, with JWKS:
+The simplest way to verify the token in the third case is for each service to ask the auth service whether the token is valid, on every request. Then every request in the system passes through the auth service, and its latency is added to each request. If the auth service goes down, all services stop working.
 
-- Auth is the only issuer. It holds the private signing key and makes each JWT.
-- Auth publishes the related public keys at a JWKS endpoint. Point the other services to that endpoint, or proxy the well-known path to it.
-- Each other service gets those keys one time, caches them, and verifies tokens locally. This is a signature check in memory, with no network call to auth on each request.
+The solution is to issue tokens in one place and verify them in every service, using JWKS (JSON Web Key Set), which is a standard format for publishing public keys.
 
-Local verification in a different service looks like this:
+- The auth service is the only issuer. It holds the private signing key and creates each JWT.
+- The auth service publishes the matching public keys at a JWKS endpoint. You point the other services at the endpoint, or you proxy the well-known path to it.
+- Each other service fetches the keys once, caches them, and verifies tokens locally. Verification is a signature check in memory, with no network call to the auth service.
+
+Local verification in another service looks like the following code.
 
 ```ts
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -279,16 +285,16 @@ export async function verify(token: string) {
 }
 ```
 
-Key rotation keeps this safe as time passes. Each key has a `kid` (key id) in the JWT header. To rotate, auth starts to sign with a new key but continues to publish the old public key. Thus the tokens that are already issued continue to work. When those old tokens have expired, auth removes the old key. Each service selects the correct key by `kid` independently, so the services do not have to change keys at the same time.
+Key rotation lets you replace the signing key without breaking tokens that are already issued. Each key has a key id, called `kid`, in the JWT header. To rotate, the auth service starts signing with a new key and keeps publishing the old public key, so existing tokens still verify. After the old tokens expire, the auth service removes the old key. Each service picks the correct key by `kid` on its own, so the services don't have to switch keys at the same time.
 
 ---
 
 ## API keys
 
-API keys are the path with no browser and no user session. They are for customers who write scripts or automations for the API, and for integrations:
+API keys give access without a browser or a user session. Customers use them in scripts, automations, and integrations.
 
-- **Hashed at rest.** The user sees the full key one time, at creation. We keep only a hash, so a database leak does not leak keys that can be used.
-- **Scoped and attributable.** A key belongs to a user and an org and has its own set of permissions. Thus it can have fewer permissions than the person who created it.
+- We store only a hash of each key. The user sees the full key once, at creation, so a database leak doesn't expose keys that can be used.
+- Each key belongs to a user and an organization, and it has its own set of permissions. A key can therefore have fewer permissions than the user who created it.
 
 ```ts
 const { key } = await auth.api.createApiKey({
@@ -305,11 +311,11 @@ const { valid, key: meta } = await auth.api.verifyApiKey({
 });
 ```
 
-The server must check an API key against the database. A JWT contains its own claims, so it needs only a signature check. The key proves your identity at the edge. From there, we map it back to the same user/org/permission model that all other parts use:
+The server has to check an API key against the database, unlike a JWT, which contains its own claims and needs only a signature check. After the key identifies the caller, we map it to the same user, organization, and permission model that the rest of the system uses.
 
-1. `verifyApiKey` gives us the key record: the user that it belongs to, the org in which it was created, and the permissions kept on it.
-2. We load the membership of that user in the org. This gives us their role and all that the role permits.
-3. The permissions that we apply are the intersection of the two. Thus a key cannot do more than the person who created it. If that person gets a lower role or is removed from the org, the permissions of their keys decrease too.
+1. `verifyApiKey` returns the key record, which holds the user that owns the key, the organization in which the key was created, and the permissions stored on the key.
+2. We load the user's membership in the organization, which gives us the user's role and the permissions of the role.
+3. We apply the intersection of the key's permissions and the role's permissions, so a key can't do more than the user who created it. If the user gets a lower role or is removed from the organization, the permissions of their keys decrease too.
 
 ---
 

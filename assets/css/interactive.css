@@ -774,8 +774,12 @@ html.dark-mode .highlight pre {
   transition: opacity 120ms ease;
 }
 
-pre:hover .ia-copy,
-pre:focus-within .ia-copy,
+.ia-code {
+  position: relative;
+}
+
+.ia-code:hover .ia-copy,
+.ia-code:focus-within .ia-copy,
 .ia-copy:focus-visible {
   opacity: 1;
 }
