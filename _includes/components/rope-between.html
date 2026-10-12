@@ -1,0 +1,16 @@
+{%- comment -%}
+Graph of the score between position A and each other position, for two copies
+of one vector. The reader selects position A and position B.
+
+Usage:
+  {% include components/rope-between.html dim="64" a="20" b="45" %}
+
+Optional: `dim` (numbers in the vector, default 64), `a` and `b` (the positions to show first).
+{%- endcomment -%}
+<div class="ia-anim ia-rope" data-rope-between
+  {%- if include.dim %} data-dim="{{ include.dim }}"{% endif -%}
+  {%- if include.a %} data-a="{{ include.a }}"{% endif -%}
+  {%- if include.b %} data-b="{{ include.b }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

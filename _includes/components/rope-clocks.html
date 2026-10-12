@@ -1,0 +1,14 @@
+{%- comment -%}
+One dial for each pair of a vector. Each pair turns at its own speed.
+
+Usage:
+  {% include components/rope-clocks.html dim="8" %}
+
+Optional: `dim` (numbers in the vector, default 8, so 4 dials) and `position` (default 0).
+{%- endcomment -%}
+<div class="ia-anim ia-rope" data-rope-clocks
+  {%- if include.dim %} data-dim="{{ include.dim }}"{% endif -%}
+  {%- if include.position %} data-position="{{ include.position }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

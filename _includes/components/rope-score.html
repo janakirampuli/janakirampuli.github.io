@@ -1,0 +1,15 @@
+{%- comment -%}
+The score between two copies of one vector, one pair at a time. One bar for
+each pair and one bar for the average. The reader changes the distance.
+
+Usage:
+  {% include components/rope-score.html dim="16" distance="3" %}
+
+Optional: `dim` (numbers in the vector, default 16, so 8 pairs) and `distance` (default 0).
+{%- endcomment -%}
+<div class="ia-anim ia-rope" data-rope-score
+  {%- if include.dim %} data-dim="{{ include.dim }}"{% endif -%}
+  {%- if include.distance %} data-distance="{{ include.distance }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

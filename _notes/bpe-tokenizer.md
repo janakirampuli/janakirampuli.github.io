@@ -1,14 +1,14 @@
 ---
 layout: notes
 title: "BPE Tokenizer"
-date: 2026-10-11
+date: 2026-10-4
 tags: ["llm", "tokenization", "bpe"]
 project: llm-from-scratch
 part: 1
 published: true
 ---
 
-A BPE (byte-pair encoding) tokenizer starts with the 256 byte values as its vocabulary, and training repeatedly merges the most frequent pair of adjacent tokens into a new token. These notes explain why tokens are learned from bytes, how to make training fast, and how encoding and decoding work. They are for [assignment 1](https://github.com/stanford-cs336/assignment1-basics) of the Stanford CS336 course.
+A BPE (byte-pair encoding) tokenizer starts with the 256 byte values as its vocabulary. Training repeatedly merges the most frequent pair of adjacent tokens into a new token.
 
 ## Contents
 
@@ -32,7 +32,7 @@ A BPE (byte-pair encoding) tokenizer starts with the 256 byte values as its voca
 
 A model works on numbers, so text has to be changed into numbers before a model can use it. Tokenization changes text into a list of numbers called token ids, and it also changes the ids back into text. The vocabulary is the fixed list of tokens that the tokenizer knows, and each token has an id.
 
-The main design choice is what the tokens should be. If the tokens are single characters or bytes, the vocabulary is small, but each text becomes a very long list of ids for the model to process. If the tokens are whole words, the lists are short, but the vocabulary becomes very large, and a word that the tokenizer hasn't seen has no id.
+The main design choice is what the tokens should be. If the tokens are single characters or bytes, the vocabulary is small, but each text becomes a very long list of ids for the model to process. If the tokens are whole words, the lists are short, but the vocabulary becomes very large. A word that the tokenizer hasn't seen also has no id.
 
 Subword tokens are a middle choice. A common word gets its own token, and the tokenizer builds a rare word from smaller tokens. BPE is a standard procedure for learning subword tokens from data.
 
@@ -61,7 +61,7 @@ UTF-8 changes each code point into 1 to 4 bytes, and a byte is a number from 0 t
 
 So all text becomes a list of numbers from 0 to 255. Byte-level BPE starts its vocabulary with the 256 byte values, so it can encode any text, including characters that weren't in the training data.
 
-Bytes have disadvantages. First, text in languages other than English starts with more tokens per character, because those characters use more bytes. Second, some byte lists aren't valid UTF-8. For example, the byte `195` must be followed by a second byte, and a list of tokens can stop in the middle of a multi-byte character. The decoder must therefore accept bytes that aren't valid UTF-8.
+Bytes have disadvantages. First, text in languages other than English starts with more tokens per character, because their characters use more bytes. Second, some byte lists aren't valid UTF-8. For example, the byte `195` must be followed by a second byte, and a list of tokens can stop in the middle of a multi-byte character. The decoder must therefore accept bytes that aren't valid UTF-8.
 
 Starting from bytes also makes the lists long. For example, the sentence `the cat saw the hat 🙂` is the following list of bytes.
 
@@ -81,7 +81,7 @@ BPE training runs the following steps in order.
 1. Pre-tokenize. Use the [GPT-2 regex](https://github.com/openai/gpt-2/blob/master/src/encoder.py#L53) to split the text into pre-tokens such as `"Hello"`, `" world"`, and `"!"`. A merge never crosses the boundary of a pre-token, so `" the"` (with its leading space) and `"the"` are different words.
 2. Handle the special tokens first. Split the text at special tokens such as `<|endoftext|>` before you apply the regex. Put the special tokens directly into the vocabulary, and don't use them in merges.
 3. Count. Store each distinct pre-token as a tuple of byte tokens, together with the number of times it occurs.
-4. Merge until the vocabulary is full. Count each pair of adjacent tokens, and weight each count by the number of times the word occurs. Then merge the most frequent pair in all words, add the merged token to the vocabulary, and record the merge. If two counts are equal, pick the pair that comes last when you compare the bytes in dictionary order.
+4. Merge until the vocabulary is full. Count each pair of adjacent tokens, and weight each count by the number of times the word occurs. Then merge the most frequent pair in all words. Add the merged token to the vocabulary, and record the merge. If two counts are equal, pick the pair that comes last when you compare the bytes in dictionary order.
 
 The following example uses a small corpus, which is `" the"` ×5, `" then"` ×2, `" cat"` ×3, and `" hat"` ×1. The corpus has no special token, so the vocabulary starts with only the 256 byte values. The symbol `␣` stands for a space.
 
@@ -89,11 +89,11 @@ The following example uses a small corpus, which is `" the"` ×5, `" then"` ×2,
 
 Three pairs have a count of 7 at the start. Their first bytes are ordered `'t'` > `'h'` > `' '`, so `('t','h')` is the first pair to merge.
 
-In the first three merges, only 4 of the 9 initial pair counts changed, and the pairs in `" cat"` and `" hat"` didn't change. A merge changes only a small number of words.
+A merge changes only a small number of words. For example, in the first three merges, only 4 of the 9 initial pair counts changed, and the pairs in `" cat"` and `" hat"` didn't change.
 
 ## Speed improvements
 
-A real text has many thousands of distinct words, and training does thousands of merges, so each merge has to be cheap. The ideas in this section keep the work of each merge small, and each one is shown on the small example.
+Each merge has to be cheap, because a large text has many thousands of distinct words and training does thousands of merges. The ideas in the section keep the work of each merge small, and each idea is shown on the small example.
 
 ### Update only the words that change
 
@@ -116,11 +116,11 @@ Two of the words didn't change, so their pairs didn't change either. The code on
 | `␣ th` | 0 | 7 |
 | `th e` | 0 | 7 |
 
-The other pair counts, such as `a t` and `c a`, stay the same. In a real text, a merge changes a small number of words out of many thousands, so each merge is a small amount of work.
+The other pair counts, such as `a t` and `c a`, stay the same. In a large text, a merge changes a small number of words out of many thousands, so each merge is a small amount of work.
 
 ### Keep an index from each pair to its words
 
-A merge of `t h` needs the words that contain `t h`, and an index gives those words directly. First, give each word a number.
+A merge of `t h` needs the words that contain `t h`, and an index gives the words directly. First, give each word a number.
 
 | Number | Word |
 |---|---|
@@ -143,7 +143,7 @@ To merge `t h`, the code looks up the pair in the table and gets words 0 and 1, 
 
 ### Use a heap to find the best pair
 
-Each merge needs the pair with the highest count. The example has only 9 pairs, but a real text has many thousands of pairs.
+Each merge needs the pair with the highest count. The example has only 9 pairs, but a large text has many thousands of pairs.
 
 A heap is a data structure that always keeps its largest item at the front. Getting the largest item and adding a new item are both fast, because the heap doesn't compare all the items. Put all the pairs and their counts into a heap.
 
@@ -157,11 +157,11 @@ A heap is a data structure that always keeps its largest item at the front. Gett
 
 The front of the heap is `t h`, so `t h` is the first merge. The merge creates two new pairs, and each one goes into the heap with its count, which is 7 for `␣ th` and 7 for `th e`.
 
-A heap can't change an entry that is already in it, so the old entries `h e` with 7 and `␣ t` with 7 stay in the heap even though the real count of both pairs is now 0. An entry with an outdated count is called stale. When an entry reaches the front, compare its count with the real count of the pair, and if the counts differ, discard the entry and take the next one.
+A heap can't change an entry that is already in it, so the old entries `h e` with 7 and `␣ t` with 7 stay in the heap even though the current count of both pairs is 0. An entry with an outdated count is called stale. When an entry reaches the front, compare its count with the current count of the pair. If the counts differ, discard the entry and take the next one.
 
 ### Count each distinct word one time
 
-The example text has 11 words, but only 4 of them are distinct, e.g., the word `␣the` occurs 5 times. A real text is similar, with millions of words but only some thousands of distinct words. So count the words first.
+The example text has 11 words, but only 4 of them are distinct, e.g., the word `␣the` occurs 5 times. A large text is similar, with millions of words but only some thousands of distinct words, so count the words first.
 
 | Word | Count |
 |---|---|
@@ -170,11 +170,11 @@ The example text has 11 words, but only 4 of them are distinct, e.g., the word `
 | `␣then` | 2 |
 | `␣hat` | 1 |
 
-Then change each distinct word into bytes once. The example needs 4 conversions instead of 11, and a real text needs some thousands of conversions instead of millions.
+Then change each distinct word into bytes once. The example needs 4 conversions instead of 11, and a large text needs some thousands of conversions instead of millions.
 
 ## Further improvements
 
-My implementation spends its time in different places on the two datasets. On TinyStories, the main process waits for the workers for 87% of the time. Inside a worker, the regex `findall` call takes 75% of the time, and that call is C code in the `regex` library.
+My implementation spends its time in different places on the two datasets. On TinyStories, the main process waits for the workers for 87% of the time. Inside a worker, the regex `findall` call takes 75% of the time, and the call is C code in the `regex` library.
 
 On OpenWebText, the merge loop takes most of the time. Training on the validation split (290 MB, vocabulary size 32,000) takes 62 s, and the merge loop uses approximately 89% of it.
 
@@ -187,7 +187,7 @@ Web text has many rare words, so each merge touches more words. On OpenWebText, 
 | Heap pushes | ~115 |
 | Heap pops (most are stale) | ~55 |
 
-Only the pairs next to a merge change. A merge of `(A,B)` in `[X, A, B, Y]` changes `(X,A)`, `(A,B)`, and `(B,Y)` and no other pair, so the next speed improvement is to update only those pairs.
+Only the pairs next to a merge change. A merge of `(A,B)` in `[X, A, B, Y]` changes `(X,A)`, `(A,B)`, and `(B,Y)` and no other pair, so the next speed improvement is to update only the three pairs.
 
 The update has to be correct when a merge is at the edge of a word, and when a sequence repeats, such as `[A,B,A,B]`. It also has to be correct for a pair of the same token, such as `(A,A)` in `[A,A,A]`.
 
@@ -219,13 +219,13 @@ The word starts as single bytes, and the tokenizer tries each merge in order.
 
 Merges 4, 5, and 6 don't apply to the word, so the result is the two tokens `␣the` and `n`. The tokenizer looks up the id of each token in the vocabulary, so a word of five bytes becomes two ids.
 
-A special token such as `<|endoftext|>` is never split. It stays as one token and gets its own id.
+A special token such as `<|endoftext|>` is never split, so it stays as one token and gets its own id.
 
-The diagram shows the full path from text to ids for one sentence, and you can change the text and the number of merges. The diagram trains its vocabulary in the page on five short sentences about a cat, a dog, and a hat, so a word that isn't in those sentences stays as single bytes or small pieces.
+The diagram shows the full path from text to ids for one sentence, and you can change the text and the number of merges. The diagram trains its vocabulary in the page on five short sentences about a cat, a dog, and a hat, so a word that isn't in the five sentences stays as single bytes or small pieces.
 
 {% include components/tokenize.html text="the cat saw the hat 🙂<|endoftext|>" %}
 
-In the diagram, the ids 0 to 255 are the byte values, the special token `<|endoftext|>` has id 256, and the merged tokens start at id 257 in the order in which training found them. The order of the ids is a choice, and other tokenizers order their vocabulary differently.
+In the diagram, the ids 0 to 255 are the byte values, and the special token `<|endoftext|>` has id 256. The merged tokens start at id 257, in the order in which training found them. The order of the ids is a choice, and other tokenizers order their vocabulary differently.
 
 The emoji isn't in the training sentences, so it stays as four tokens of one byte each. One byte of an emoji isn't valid UTF-8, so the diagram shows each of the four bytes as a hex value such as `\xf0`.
 
@@ -239,4 +239,4 @@ Caching makes encoding much faster, because a small number of common words make 
 
 For pre-tokenization, Gigatoken uses a hand-written scanner instead of a regex library, and the scanner gives the same splits. The scanner examines 8 bytes at a time, and a later version examines 64 bytes at a time. On one CPU core, the speed went from 47 MB/s with a regex library to more than 1 GB/s.
 
-For the merges, Gigatoken caches the token ids of each word, as described in the encoding section. 99.4% of the lookups find the word in the cache, so the merge code almost never runs, and most of the work went into making the lookups fast. Gigatoken also reads files directly instead of through Python. It divides the work across all CPU cores, and it writes all the ids into one flat array.
+For the merges, Gigatoken caches the token ids of each word, as described in the encoding section. The cache has the word for 99.4% of the lookups, so the merge code almost never runs. Most of the work on Gigatoken therefore went into making the lookups fast. Gigatoken also reads files directly instead of through Python. It divides the work across all CPU cores, and it writes all the ids into one flat array.

@@ -1,0 +1,14 @@
+{%- comment -%}
+The arrows of two words. The reader changes the position of the first word and
+the distance between the words. The score changes only with the distance.
+
+Usage:
+  {% include components/rope-relative.html step="20" %}
+
+Optional: `step` (degrees for each position, default 20).
+{%- endcomment -%}
+<div class="ia-anim ia-rope" data-rope-relative
+  {%- if include.step %} data-step="{{ include.step }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

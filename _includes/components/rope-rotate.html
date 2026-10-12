@@ -1,0 +1,15 @@
+{%- comment -%}
+One pair of numbers as an arrow. The arrow turns by `position × step`.
+The reader selects a word of the sentence "the cat sat on the mat".
+
+Usage:
+  {% include components/rope-rotate.html step="30" %}
+
+Optional: `step` (degrees for each position, default 30) and `position` (the word to show first, default 2).
+{%- endcomment -%}
+<div class="ia-anim ia-rope" data-rope-rotate
+  {%- if include.step %} data-step="{{ include.step }}"{% endif -%}
+  {%- if include.position %} data-position="{{ include.position }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

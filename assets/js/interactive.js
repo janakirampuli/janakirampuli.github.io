@@ -378,3 +378,9 @@ if (document.querySelector('[data-bpe-train], [data-tokenize]')) {
     console.error('Tokenizer diagrams failed', e);
   });
 }
+
+if (document.querySelector('[data-rope-rotate], [data-rope-relative], [data-rope-clocks], [data-rope-score], [data-rope-curve], [data-rope-between]')) {
+  import('./rope-viz.js').catch((e) => {
+    console.error('RoPE diagrams failed', e);
+  });
+}

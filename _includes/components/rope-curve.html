@@ -1,0 +1,14 @@
+{%- comment -%}
+Graph of the score against the distance, for one fast pair, one slower pair and all pairs.
+
+Usage:
+  {% include components/rope-curve.html dim="64" distance="6" %}
+
+Optional: `dim` (numbers in the vector, default 64) and `distance` (the distance to mark first, default 6).
+{%- endcomment -%}
+<div class="ia-anim ia-rope" data-rope-curve
+  {%- if include.dim %} data-dim="{{ include.dim }}"{% endif -%}
+  {%- if include.distance %} data-distance="{{ include.distance }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>
