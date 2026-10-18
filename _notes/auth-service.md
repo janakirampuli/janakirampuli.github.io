@@ -1,12 +1,12 @@
 ---
-layout: post
+layout: notes
 title: "Building an Auth Service"
 date: 2026-07-25
 tags: ["auth", "backend", "systems"]
 published: true
 ---
 
-I built our auth service on [better-auth](https://better-auth.com), which is a TypeScript auth library that we host ourselves. Users get sessions that are stored in our database, and services get short-lived signed tokens that other services verify without calling the auth service. This post gives the requirements, explains the concepts that I had to learn, and shows how better-auth covers each requirement.
+I built our auth service on [better-auth](https://better-auth.com), which is a TypeScript auth library that we host ourselves. Users get sessions that are stored in our database, and services get short-lived signed tokens that other services verify without calling the auth service. This note gives the requirements, explains the concepts that I had to learn, and shows how better-auth covers each requirement.
 
 ## Contents
 

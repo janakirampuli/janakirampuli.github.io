@@ -1,14 +1,14 @@
 ---
-layout: post
+layout: notes
 title: "Authorization with ReBAC"
 date: 2026-09-19
 tags: ["authz", "rebac", "cedar", "backend", "systems"]
 published: true
 ---
 
-Relationship-based access control (ReBAC) decides a permission by looking for a path through relationships that the app stores, e.g., a user is in a group, the group can view an album, and the album contains a photo. This post explains how ReBAC handles sharing and permissions across resources, and how to build it on [Cedar](https://www.cedarpolicy.com/), which is a policy language from AWS.
+Relationship-based access control (ReBAC) decides a permission by looking for a path through relationships that the app stores, e.g., a user is in a group, the group can view an album, and the album contains a photo. This note explains how ReBAC handles sharing and permissions across resources, and how to build it on [Cedar](https://www.cedarpolicy.com/), which is a policy language from AWS.
 
-The [auth service post](/_posts/auth-service.html) was about authentication, which finds out who the caller is. Authorization is the next step, and it decides whether a known caller can do an action on a resource. The caller is called the principal.
+The [auth service note](/notes/auth-service.html) was about authentication, which finds out who the caller is. Authorization is the next step, and it decides whether a known caller can do an action on a resource. The caller is called the principal.
 
 ```
 principal  +  action     +  resource              ->   allow / deny
@@ -128,7 +128,7 @@ Zanzibar-style services, e.g., [OpenFGA](https://openfga.dev) and [SpiceDB](http
 
 [Cedar](https://www.cedarpolicy.com/) is a policy language from AWS that comes with an evaluator. The evaluator is a Rust library with WebAssembly bindings, and it runs inside your process and stores no data. You give it the policies, the relevant entities, and the request, and it returns a decision. [AWS Verified Permissions](https://aws.amazon.com/verified-permissions/) is the hosted version.
 
-I use Cedar in the rest of the post. The grants are stored in the same database as their resources, so a resource and its first grant are written to one database, instead of to two systems that can fail independently.
+I use Cedar in the rest of the note. The grants are stored in the same database as their resources, so a resource and its first grant are written to one database, instead of to two systems that can fail independently.
 
 The trade-off is that you have to load the relevant relationships yourself before each decision. You also have to write the query that finds which resources alice can reach.
 

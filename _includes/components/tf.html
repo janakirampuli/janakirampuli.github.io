@@ -1,0 +1,20 @@
+{%- comment -%}
+Transformer diagrams. The code is in transformer-viz.js and transformer-explorer.js,
+and the styles are in transformer.css (add it to `extra_css` in the front matter).
+
+Usage:
+  {% include components/tf.html diagram="explorer" layers="2" %}
+  {% include components/tf.html diagram="embed" %}
+
+`diagram` is one of: explorer, embed, rmsnorm, attention, swiglu, output, shapes.
+Optional for the explorer: `layers` (1 to 4, default 1). With 1 layer, the view marks it "× N".
+{%- endcomment -%}
+{%- if include.diagram == "explorer" -%}
+<div class="ia-tf ia-tf-x" data-tf-explorer{% if include.layers %} data-layers="{{ include.layers }}"{% endif %}>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>
+{%- else -%}
+<div class="ia-anim ia-tf ia-tf--{{ include.diagram }}" data-tf-{{ include.diagram }}>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>
+{%- endif -%}

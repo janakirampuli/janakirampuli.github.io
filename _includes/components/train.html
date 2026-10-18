@@ -1,0 +1,12 @@
+{%- comment -%}
+Training diagrams. The code is in training-viz.js, and the styles are in transformer.css
+and training.css (add both to `extra_css` in the front matter).
+
+Usage:
+  {% include components/train.html diagram="optim" %}
+
+`diagram` is one of: network, activation, gradient, optim, schedule, batch.
+{%- endcomment -%}
+<div class="ia-anim ia-tf ia-tr ia-tr--{{ include.diagram }}" data-tr-{{ include.diagram }}>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

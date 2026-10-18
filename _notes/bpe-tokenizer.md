@@ -59,7 +59,7 @@ UTF-8 changes each code point into 1 to 4 bytes, and a byte is a number from 0 t
 | `牛` | U+725B | `231 137 155` |
 | `🙂` | U+1F642 | `240 159 153 130` |
 
-So all text becomes a list of numbers from 0 to 255. Byte-level BPE starts its vocabulary with the 256 byte values, so it can encode any text, including characters that weren't in the training data.
+So all text becomes a list of numbers from 0 to 255. Byte-level BPE starts its vocabulary with the 256 byte values, so it can encode any text, including characters that weren't in the training data. Byte-level BPE is from [GPT-2](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) (Radford and others, 2019).
 
 Bytes have disadvantages. First, text in languages other than English starts with more tokens per character, because their characters use more bytes. Second, some byte lists aren't valid UTF-8. For example, the byte `195` must be followed by a second byte, and a list of tokens can stop in the middle of a multi-byte character. The decoder must therefore accept bytes that aren't valid UTF-8.
 
@@ -75,6 +75,8 @@ The sentence has 5 words and 1 emoji, but the list has 24 tokens. Each byte is o
 The goal is to find the groups of bytes that occur often and to make each group one token, so the same sentence becomes a shorter list of ids. BPE training finds the groups in a large text.
 
 ## BPE algorithm
+
+BPE started as a method to compress data. [Neural Machine Translation of Rare Words with Subword Units](https://arxiv.org/abs/1508.07909) (Sennrich and others, 2015) used it to split words into subwords, so a model can handle a rare word as a few smaller tokens.
 
 BPE training runs the following steps in order.
 

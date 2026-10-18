@@ -384,3 +384,21 @@ if (document.querySelector('[data-rope-rotate], [data-rope-relative], [data-rope
     console.error('RoPE diagrams failed', e);
   });
 }
+
+if (document.querySelector('[data-tf-embed], [data-tf-rmsnorm], [data-tf-attention], [data-tf-swiglu], [data-tf-output], [data-tf-shapes]')) {
+  import('./transformer-viz.js').catch((e) => {
+    console.error('Transformer diagrams failed', e);
+  });
+}
+
+if (document.querySelector('[data-tr-network], [data-tr-activation], [data-tr-gradient], [data-tr-optim], [data-tr-schedule], [data-tr-batch]')) {
+  import('./training-viz.js').catch((e) => {
+    console.error('Training diagrams failed', e);
+  });
+}
+
+if (document.querySelector('[data-tf-explorer]')) {
+  import('./transformer-explorer.js').catch((e) => {
+    console.error('Transformer explorer failed', e);
+  });
+}
