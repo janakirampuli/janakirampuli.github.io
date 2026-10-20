@@ -363,6 +363,11 @@ body {
     display: block;
   }
 
+  html.dark-mode .theme-toggle__svg--sun,
+  html:not(.dark-mode) .theme-toggle__svg--moon {
+    display: none;
+  }
+
   /* Global Back-to-Top button */
   .back-to-top {
     position: fixed;
@@ -617,3 +622,32 @@ body {
     background: #000;
   }
 
+/* Dark mode. The script in the head adds html.dark-mode before the first paint.
+   :where() keeps these selectors as weak as plain `body` and `a`, so more
+   specific rules still win. */
+html.dark-mode {
+  color-scheme: dark;
+  background: #141414;
+}
+
+:where(html.dark-mode) body {
+  background: #141414;
+  color: #ffffff;
+}
+
+:where(html.dark-mode) a {
+  color: #bb86fc;
+}
+
+html.dark-mode .poem {
+  background-color: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ddd;
+}
+
+/* While the theme switches, colors change without transitions. */
+html[data-theme-switching] *,
+html[data-theme-switching] *::before,
+html[data-theme-switching] *::after {
+  transition: none !important;
+}
