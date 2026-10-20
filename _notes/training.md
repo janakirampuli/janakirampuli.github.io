@@ -1,7 +1,7 @@
 ---
 layout: notes
-title: "Training neural networks"
-date: 2026-10-18
+title: "Neural networks 101"
+date: 2026-10-20
 tags: ["llm", "training", "optimization"]
 project: llm-from-scratch
 part: 4
@@ -42,9 +42,9 @@ Each step of training goes through the same parts, in order:
 3. The gradients say how the loss changes when each weight changes.
 4. An optimizer uses the gradients to change the weights.
 
-The examples in the note use a small task, which is to predict a number $y$ from a number $x$. The simplest model for the task is a line, $\hat{y} = wx + b$, with two weights $w$ and $b$. A language model works the same way at a much larger scale. Its input is a list of tokens, and its output is a probability for each possible next token.
+The diagram trains a small network to sort points in a plane into two classes, where the orange points are inside a circle and the blue points are around it. The network has two inputs, which are the two coordinates of a point, and one output, which is the probability that the point is orange. Between them are two layers of four hidden units, which are the numbers that the network computes on the way from the input to the output. Each step takes a batch of 10 points and goes through the four parts. The two classes overlap near the edge of the circle, so no boundary can put every point on the correct side.
 
-The diagram runs the four parts on a small network with one input $x$ and one output $\hat{y}$. Between them are five hidden units, which are the numbers that the network computes on the way from the input to the output. Each step takes one of the points on the right as its example. You can go through the four parts of one step, or you can train for many steps and see the curve of the network move toward the points.
+In the drawing of the network, each line is a weight. Orange lines are positive weights and blue lines are negative weights, and a thicker line means a larger weight. In the plane, the shading shows the output of the network at each place, and the white line is the boundary where the probability is 0.5. The plot under them shows the average loss over all the points after each step.
 
 {% include components/train.html diagram="network" %}
 
@@ -54,7 +54,7 @@ A neural network is a stack of layers, and most layers are linear layers with an
 
 Without an activation function, many layers are no better than one layer. If you leave out the biases, two linear layers in a row give $W_2(W_1 x) = (W_2 W_1)\,x$. The result is again one linear layer, with the table $W_2 W_1$. Thus a stack of linear layers can only give a straight line, or a flat plane for many inputs, however many layers it has. An activation function between the layers lets each layer bend the output, so a network with enough units can follow almost any curve.{% include components/sidenote.html id="sn-bends" label="1" text="A network of ReLUs computes a function made of straight pieces. With one input and one layer of $n$ ReLU units, each unit adds at most one bend, at the input where its own input crosses 0. Thus the output is a curve with up to $n$ bends, and more bends can follow a curve more closely." %}
 
-In the diagram, a network with one layer of units fits the points as well as it can. You can choose the activation function and the number of units.
+In the diagram, a network with one layer of units fits the points as well as it can.
 
 {% include components/train.html diagram="activation" %}
 
@@ -66,9 +66,9 @@ In the diagram, a network with one layer of units fits the points as well as it 
 
 Older networks used the sigmoid and tanh functions, which are smooth steps between two values. For large positive or negative inputs, both curves become flat, so their slope is near 0. Training changes a weight by an amount that depends on the slopes after it, so in a deep network of sigmoids, the weights of the first layers barely change. The problem is called the vanishing gradient.
 
-ReLU doesn't become flat for positive inputs, because its slope is 1 for every positive input. It is also cheap to compute, and it became common after [Rectified Linear Units Improve Restricted Boltzmann Machines](https://www.cs.toronto.edu/~hinton/absps/reluICML.pdf) (Nair and Hinton, 2010). A ReLU unit whose input is always negative always gives 0 and has a slope of 0. Its weights then stop changing, and the unit is called a dead ReLU. Leaky ReLU, from [Maas and others (2013)](https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf), gives negative inputs a small slope instead, e.g., $0.01\,z$, so its units can't die.
+ReLU doesn't become flat for positive inputs, because its slope is 1 for every positive input. It is also cheap to compute, and it became common after [Rectified Linear Units Improve Restricted Boltzmann Machines](https://www.cs.toronto.edu/~hinton/absps/reluICML.pdf) (Nair and Hinton, 2010). A ReLU unit whose input is always negative always gives 0 and has a slope of 0. Its weights then stop changing, and the unit is called a dead ReLU. Leaky ReLU gives negative inputs a small slope instead, e.g., $0.01\,z$, so its units can't die.
 
-GELU and SiLU multiply $z$ by a smooth step that goes from 0 for large negative $z$ to 1 for large positive $z$. GELU, from [Gaussian Error Linear Units](https://arxiv.org/abs/1606.08415) (Hendrycks and Gimpel, 2016), uses the step $\Phi(z)$ from the normal distribution. SiLU, from [Elfwing and others (2017)](https://arxiv.org/abs/1702.03118), uses the sigmoid, $1 / (1 + e^{-z})$. [Ramachandran and others (2017)](https://arxiv.org/abs/1710.05941) found the same function in a search and called it Swish. Both curves are smooth, and they go a little below 0 for negative inputs instead of being exactly flat.
+GELU and SiLU multiply $z$ by a smooth step that goes from 0 for large negative $z$ to 1 for large positive $z$. GELU, from [Gaussian Error Linear Units](https://arxiv.org/abs/1606.08415) (Hendrycks and Gimpel, 2016), uses the step $\Phi(z)$ from the normal distribution. SiLU uses the sigmoid, $1 / (1 + e^{-z})$, and it is also called Swish. Both curves are smooth, and they go a little below 0 for negative inputs instead of being exactly flat.
 
 ## Weight initialization
 
@@ -126,9 +126,9 @@ In practice, the model computes the loss from the logits, as in the second formu
 
 The gradient tells, for each weight, how fast the loss changes when the weight changes a little. For one weight $w$, it is the slope of the loss, written $\partial \ell / \partial w$. A positive slope means that a larger $w$ gives a larger loss, so the weight should become smaller. A negative slope means the opposite. The gradient is the list of these slopes, one for each weight.
 
-For example, take the line model and one example $(x, y)$, with the loss $\ell = (wx + b - y)^2$. The slope for $w$ is $2(wx + b - y)\,x$. If the prediction is too large, $wx + b - y$ is positive. For a positive $x$, the slope is then positive, so a smaller $w$ gives a smaller loss.
+For example, take a model that predicts a number $y$ from a number $x$ with a line, $\hat{y} = wx + b$, and one example $(x, y)$, with the loss $\ell = (wx + b - y)^2$. The slope for $w$ is $2(wx + b - y)\,x$. If the prediction is too large, $wx + b - y$ is positive. For a positive $x$, the slope is then positive, so a smaller $w$ gives a smaller loss.
 
-In the diagram, you can move $w$, or you can take steps that move $w$ against its slope. The dashed line has the slope of the loss at the current $w$.
+In the diagram, the dashed line has the slope of the loss at the current $w$.
 
 {% include components/train.html diagram="gradient" %}
 
@@ -148,7 +148,7 @@ $$
 \theta \leftarrow \theta - \eta\, g
 $$
 
-Here $\theta$ is a weight, $g$ is its gradient, and $\eta$ is the learning rate. A gradient over all the training data is slow to compute, so stochastic gradient descent (SGD) computes it on a small random batch of examples instead. Stochastic means random, and the idea is from [A Stochastic Approximation Method](https://doi.org/10.1214/aoms/1177729586) (Robbins and Monro, 1951). The gradient of a batch is close to the gradient of all the data but not exactly equal to it, and it is much cheaper to compute.
+Here $\theta$ is a weight, $g$ is its gradient, and $\eta$ is the learning rate. A gradient over all the training data is slow to compute, so stochastic gradient descent (SGD) computes it on a small random batch of examples instead. The gradient of a batch is close to the gradient of all the data but not exactly equal to it, and it is much cheaper to compute.
 
 The learning rate sets the size of each step. If it is too small, the loss goes down slowly. If it is too large, each step goes past the lowest point, and the loss goes up instead of down. With a very large learning rate, the weights grow without limit.
 
@@ -160,7 +160,7 @@ $$
 m \leftarrow \beta\, m + g, \qquad \theta \leftarrow \theta - \eta\, m
 $$
 
-A direction where the gradient changes sign from step to step cancels out in the average, and a direction where it keeps the same sign builds up.{% include components/sidenote.html id="sn-kappa" label="4" text="On a loss shaped like a long narrow valley, let $\kappa$ be the ratio of the steepest curvature to the shallowest one, where curvature is how fast the slope changes. With the best learning rate, SGD needs a number of steps that grows in proportion to $\kappa$, and momentum needs a number that grows only with $\sqrt{\kappa}$. For $\kappa = 100$, momentum needs about 10 times fewer steps. [Why Momentum Really Works](https://distill.pub/2017/momentum/) (Goh, 2017) shows the result with interactive diagrams." %} [On the Importance of Initialization and Momentum in Deep Learning](https://proceedings.mlr.press/v28/sutskever13.html) (Sutskever and others, 2013) showed that momentum is important for training deep networks.
+A direction where the gradient changes sign from step to step cancels out in the average, and a direction where it keeps the same sign builds up.{% include components/sidenote.html id="sn-kappa" label="4" text="On a loss shaped like a long narrow valley, let $\kappa$ be the ratio of the steepest curvature to the shallowest one, where curvature is how fast the slope changes. With the best learning rate, SGD needs a number of steps that grows in proportion to $\kappa$, and momentum needs a number that grows only with $\sqrt{\kappa}$. For $\kappa = 100$, momentum needs about 10 times fewer steps." %}
 
 ### Adam
 
@@ -174,7 +174,7 @@ $$
 
 The average $m$ is momentum. The division by $\sqrt{\hat{v}}$ is from RMSprop, which Hinton described in his [lecture slides](https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) (2012), and it gives each weight a step of about the same size, whether its gradients are large or small.{% include components/sidenote.html id="sn-adamstep" label="5" text="When the gradient of a weight is steady, $\hat{m} / \sqrt{\hat{v}}$ is close to 1 or -1, so the step is close to $\eta$. Thus in Adam the learning rate is about the largest change of a weight in one step, whatever the units of the loss. In SGD the step is $\eta g$, so the right learning rate depends on the scale of the gradients." %} The averages $m$ and $v$ start at 0, so in the first steps they are too small. Adam corrects them as $\hat{m} = m / (1 - \beta_1^t)$ and $\hat{v} = v / (1 - \beta_2^t)$, where $t$ is the step number. The small number $\varepsilon$ stops a division by zero.
 
-The diagram runs SGD, momentum and Adam from the same start, and the chart under it shows the loss at each step. The first surface is a narrow valley, where the loss changes fast along one direction and slowly along the other. The second surface is a saddle point, where the gradient is 0 but the loss still goes down along one direction. In a network with many weights, most points where the gradient is 0 are saddle points and not low points, as [Dauphin and others (2014)](https://arxiv.org/abs/1406.2572) argued. You can change the learning rate, and you can add noise to the gradients, as small batches do.
+The diagram runs SGD, momentum and Adam from the same start, and the chart under it shows the loss at each step. The first surface is a narrow valley, where the loss changes fast along one direction and slowly along the other. The second surface is a saddle point, where the gradient is 0 but the loss still goes down along one direction. In a network with many weights, most points where the gradient is 0 are saddle points and not low points.
 
 {% include components/train.html diagram="optim" %}
 
@@ -192,7 +192,9 @@ The method is called AdamW, and most language models train with it. Adam and Ada
 
 ## Learning rate schedule
 
-Most training runs change the learning rate during training. In a common schedule, the learning rate first grows and then goes down:
+The best learning rate changes during training, so one fixed value can't be right for the whole run. The SGD section showed that a learning rate that is too small makes slow progress, and that one that is too large makes the loss go up. Near the end of training, the noise of the batches adds another problem. Each step moves the weights a little in a random direction, and the size of that movement grows with the learning rate. With a fixed large rate, the weights keep moving around the lowest point, so the loss stops going down at a level that the noise sets. With a fixed small rate, the weights can get closer to the lowest point, but the start of training is slow.
+
+The best values also depend on the setup, e.g., the model size and the batch size, so people usually find $\eta_{max}$ by trying a few values in short runs. Then, instead of a fixed value, most training runs change the learning rate during training. In a common schedule, the learning rate first grows and then goes down:
 
 1. During the warmup, the learning rate grows from 0 to its largest value $\eta_{max}$ over the first $T_w$ steps.
 2. After the warmup, the learning rate goes down along a cosine curve to a small value $\eta_{min}$ at step $T_c$.
@@ -203,9 +205,9 @@ $$
 
 {% include components/train.html diagram="schedule" %}
 
-The cosine schedule is from [SGDR](https://arxiv.org/abs/1608.03983) (Loshchilov and Hutter, 2016). Early in training, large steps make fast progress. Near the end, the noise of the batches keeps the weights moving around the lowest point, and smaller steps let them settle closer to it.
+The cosine schedule is from [SGDR](https://arxiv.org/abs/1608.03983) (Loshchilov and Hutter, 2016), and its shape fits the problem above. The cosine curve is flat at the top, so after the warmup the learning rate stays close to $\eta_{max}$ for a long time, and most of the training uses large steps that make fast progress. The curve falls fastest in the middle, and it becomes flat again near $\eta_{min}$, so the last part of training has many small steps that let the weights settle close to the lowest point.
 
-The warmup helps because large steps can make the start of training unstable. At the start, the weights are random, and the gradients can be large and change fast. The transformer paper used a warmup, and [Accurate, Large Minibatch SGD](https://arxiv.org/abs/1706.02677) (Goyal and others, 2017) used one to train with very large batches.{% include components/sidenote.html id="sn-warmup" label="6" text="Adam has its own reason to need a warmup. In the first steps, $v$ is an average of only a few squared gradients, so it is a poor estimate. The division by $\sqrt{v}$ can then give some weights very large steps. [Liu and others (2019)](https://arxiv.org/abs/1908.03265) showed that the warmup works because it keeps the steps small until $v$ is a good estimate." %}
+The warmup helps because large steps can make the start of training unstable. At the start, the weights are random, and the gradients can be large and change fast. The transformer paper used a warmup, and [Accurate, Large Minibatch SGD](https://arxiv.org/abs/1706.02677) (Goyal and others, 2017) used one to train with very large batches.{% include components/sidenote.html id="sn-warmup" label="6" text="Adam has its own reason to need a warmup. In the first steps, $v$ is an average of only a few squared gradients, so it is a poor estimate. The division by $\sqrt{v}$ can then give some weights very large steps. The warmup keeps the steps small until $v$ is a good estimate." %}
 
 ## Gradient clipping
 
@@ -231,7 +233,7 @@ For example, the piece `the cat saw the hat` gives the input and the target in t
 
 {% include components/train.html diagram="batch" %}
 
-The batch size $B$ is the number of examples in one gradient, and a larger batch gives a gradient that is closer to the gradient of all the data. The hardware computes the examples of a batch at the same time, but a larger batch needs more memory. For SGD, a common rule is to make the learning rate $k$ times larger when the batch becomes $k$ times larger, with a warmup at the start (Goyal and others, 2017). The rule works up to a limit, called the critical batch size. [An Empirical Model of Large-Batch Training](https://arxiv.org/abs/1812.06162) (McCandlish and others, 2018) showed that above the critical batch size, a larger batch barely reduces the number of steps. Most of the extra examples in each batch are then wasted.
+The batch size $B$ is the number of examples in one gradient, and a larger batch gives a gradient that is closer to the gradient of all the data. The hardware computes the examples of a batch at the same time, but a larger batch needs more memory. For SGD, a common rule is to make the learning rate $k$ times larger when the batch becomes $k$ times larger, with a warmup at the start. The rule works up to a limit, called the critical batch size. [An Empirical Model of Large-Batch Training](https://arxiv.org/abs/1812.06162) (McCandlish and others, 2018) showed that above the critical batch size, a larger batch barely reduces the number of steps. Most of the extra examples in each batch are then wasted.
 
 Gradient accumulation gives the gradient of a large batch with the memory of a small one. The loop runs the forward and backward passes on $k$ small batches, with each loss divided by $k$. The gradients add up, as they do in most libraries, and then the optimizer takes one step. The result is the same as one step on a batch $k$ times larger.
 
@@ -240,6 +242,8 @@ Every few hundred steps, the loop computes the loss on validation data, which is
 The loop also saves checkpoints. A checkpoint is a file with the weights, the optimizer state ($m$ and $v$ for AdamW) and the step number, so a run can stop and continue later from the same point. Without the optimizer state, the run would start Adam's averages again from 0.
 
 ## Generating text
+
+The language model in this section is a transformer, and the [transformer note](/notes/transformer.html) shows the network inside it, from the input tokens to the probabilities for the next token.
 
 A trained language model generates text one token at a time:
 

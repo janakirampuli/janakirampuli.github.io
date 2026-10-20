@@ -1,6 +1,6 @@
 /*
   Training diagrams
-  - [data-tr-network]:    a small network, one training step at a time: forward, loss, backward, update
+  - [data-tr-network]:    a 2-4-4-1 network learns two classes of points, with its loss after each step
   - [data-tr-activation]: fit a curve with a small network, with and without an activation function
   - [data-tr-gradient]:   the slope of the loss for one weight of the line model
   - [data-tr-optim]:      SGD, momentum and Adam on a 2D loss surface
@@ -172,301 +172,292 @@ function solve(A, b) {
 }
 
 /* -----------------------------
- * A small network, one training step at a time
+ * A small network
  * -----------------------------
-   One input, five ReLU units and one output, trained with SGD on one example
-   at a time. Each step has four stages: forward, loss, backward and update.
+   Two inputs, two layers of four ReLU units and one output, trained with SGD on
+   batches of 10 points. The points inside the circle are one class, and the
+   points around it are the other. The two classes overlap near the edge, so no
+   boundary gets all the points right. The output is the logit of the inner class.
 */
-const NET_TARGET = (x) => Math.sin(1.6 * x) + 0.35 * x;
+const NET_SIZES = [2, 4, 4, 1];
 
 function buildNetwork(root) {
-  const N = 5;
-  const LR = 0.02;
-  const data = Array.from({ length: 21 }, (_, i) => {
-    const x = -3 + (6 * i) / 20;
-    return [x, NET_TARGET(x)];
-  });
-  const STAGES = ['Forward', 'Loss', 'Backward', 'Update'];
+  const LR = 0.1;
+  const BATCH = 10;
+  const MAX_STEPS = 1500;
+  const STEPS_PER_FRAME = 3;
+  const R = 3;
+  const G = 36;
+  const last = NET_SIZES.length - 2;
+  const data = (() => {
+    const r = seeded(5);
+    return Array.from({ length: 120 }, (_, i) => {
+      const inner = i % 2 === 0;
+      const rad = inner ? 1.8 * Math.sqrt(r()) : 1.4 + 1.5 * r();
+      const a = 2 * Math.PI * r();
+      return [rad * Math.cos(a), rad * Math.sin(a), inner ? 1 : 0];
+    });
+  })();
 
-  let p;
+  let layers;
   let pick;
-  let ex;
-  let f;
-  let g;
-  let stage;
   let steps;
   let history;
-  let focus = null;
-  let lossBefore = 0;
-  let timer = null;
+  let raf = null;
+  // One step, part by part.
+  const STAGES = ['Forward', 'Loss', 'Backward', 'Optimizer'];
+  let stage = -1;
+  let walk = null;
+  let batch = null;
+  let grads = null;
 
   function init() {
     const r = seeded(3);
-    p = { w1: [], b1: [], w2: [], b2: 0 };
-    for (let j = 0; j < N; j++) {
-      const c = -2.4 + (4.8 * j) / (N - 1);
-      p.w1[j] = (j % 2 ? -1 : 1) * (0.9 + 0.4 * r());
-      p.b1[j] = -p.w1[j] * c;
-      p.w2[j] = 0.15 * gauss(r);
-    }
+    layers = NET_SIZES.slice(1).map((n, k) => ({
+      W: Array.from({ length: n }, () => Array.from({ length: NET_SIZES[k] }, () => gauss(r) * Math.sqrt(2 / NET_SIZES[k]))),
+      b: new Array(n).fill(0.1),
+    }));
     pick = seeded(11);
     steps = 0;
     history = [avgLoss()];
-    next();
-    stage = 0;
   }
 
-  const forward = (x) => {
-    const z = p.w1.map((w, j) => w * x + p.b1[j]);
-    const a = z.map((v) => Math.max(0, v));
-    return { x, z, a, y: a.reduce((s, v, j) => s + v * p.w2[j], p.b2) };
+  // The activations of each layer, from the input to the logit.
+  function forward(x) {
+    const as = [x];
+    let a = x;
+    layers.forEach((l, k) => {
+      const z = l.W.map((row, i) => row.reduce((s, w, j) => s + w * a[j], l.b[i]));
+      a = k < last ? z.map((v) => Math.max(0, v)) : z;
+      as.push(a);
+    });
+    return as;
+  }
+  const logit = (x0, x1) => forward([x0, x1])[last + 1][0];
+  // Cross-entropy from the logit: log(1 + e^z) − y·z.
+  const softplus = (z) => Math.max(z, 0) + Math.log1p(Math.exp(-Math.abs(z)));
+  const avgLoss = () => data.reduce((s, [x0, x1, y]) => { const z = logit(x0, x1); return s + softplus(z) - y * z; }, 0) / data.length;
+  const accuracy = () => data.filter(([x0, x1, y]) => (logit(x0, x1) > 0) === (y === 1)).length / data.length;
+
+  const sampleBatch = () => Array.from({ length: BATCH }, () => data[Math.floor(pick() * data.length)]);
+  const batchLoss = (pts) => pts.reduce((s, [x0, x1, y]) => { const z = logit(x0, x1); return s + softplus(z) - y * z; }, 0) / pts.length;
+
+  // Forward and backward for each point of the batch, with the gradients added up.
+  function gradients(pts) {
+    const g = layers.map((l) => ({ W: l.W.map((row) => row.map(() => 0)), b: l.b.map(() => 0) }));
+    for (const [x0, x1, y] of pts) {
+      const as = forward([x0, x1]);
+      let d = [(sigmoid(as[last + 1][0]) - y) / BATCH];
+      for (let k = last; k >= 0; k--) {
+        const a = as[k];
+        d.forEach((di, i) => {
+          g[k].b[i] += di;
+          a.forEach((aj, j) => { g[k].W[i][j] += di * aj; });
+        });
+        if (k > 0) d = a.map((aj, j) => (aj > 0 ? d.reduce((s, di, i) => s + di * layers[k].W[i][j], 0) : 0));
+      }
+    }
+    return g;
+  }
+
+  function update(g) {
+    layers.forEach((l, k) => {
+      l.W.forEach((row, i) => row.forEach((w, j) => { row[j] = w - LR * g[k].W[i][j]; }));
+      l.b.forEach((b, i) => { l.b[i] = b - LR * g[k].b[i]; });
+    });
+    steps += 1;
+    history.push(avgLoss());
+  }
+
+  const step = () => update(gradients(sampleBatch()));
+
+  /* The network. Each line is a weight, and its color and width show the sign and the size. */
+  const NW = 300;
+  const NH = 300;
+  const colX = NET_SIZES.map((_, c) => 28 + (c * (NW - 56)) / (NET_SIZES.length - 1));
+  const unitY = (c, i) => (NH - 24) / 2 + (i - (NET_SIZES[c] - 1) / 2) * 62;
+  const wires = NET_SIZES.slice(1).map((n, k) => Array.from({ length: n }, (_, i) => Array.from({ length: NET_SIZES[k] }, (_, j) => (
+    svg('line', { class: 'ia-tr-wire', x1: colX[k], y1: unitY(k, j), x2: colX[k + 1], y2: unitY(k + 1, i) })
+  ))));
+  const unitName = (c, i) => (c === 0 ? `x${'₁₂'[i]}` : c === NET_SIZES.length - 1 ? 'p' : '');
+  const net = svg('svg', { viewBox: `0 0 ${NW} ${NH}`, class: 'ia-tf-plot', role: 'img', 'aria-label': 'The network: two inputs, two layers of four ReLU units and one output' }, [
+    svg('g', {}, wires.flat(2)),
+    ...NET_SIZES.flatMap((n, c) => Array.from({ length: n }, (_, i) => svg('g', {}, [
+      svg('circle', { class: 'ia-tr-unit', cx: colX[c], cy: unitY(c, i), r: 13 }),
+      svg('text', { class: 'ia-tr-unit__name', x: colX[c], y: unitY(c, i) + 4, 'text-anchor': 'middle' }, unitName(c, i)),
+    ]))),
+    ...['input', 'ReLU', 'ReLU', 'output'].map((t, c) => svg('text', { class: 'ia-tf-guide-label', x: colX[c], y: NH - 8, 'text-anchor': 'middle' }, t)),
+  ]);
+
+  /* The plane: the output of the network as shading, the boundary and the points. */
+  const F = frame(360, 360, [-R, R], [-R, R], { l: 8, r: 8, t: 8, b: 8 });
+  const gx = (i) => F.px(-R + (2 * R * i) / G);
+  const gy = (j) => F.py(-R + (2 * R * j) / G);
+  // The shading is a small canvas, one pixel for each corner of the grid, that the
+  // browser scales up smoothly.
+  const canvas = document.createElement('canvas');
+  canvas.width = G + 1;
+  canvas.height = G + 1;
+  const ctx = canvas.getContext('2d');
+  const shade = svg('image', { x: gx(-0.5), y: gy(G + 0.5), width: gx(G + 0.5) - gx(-0.5), height: gy(-0.5) - gy(G + 0.5), preserveAspectRatio: 'none' });
+  const rgb = (name) => {
+    ctx.fillStyle = getComputedStyle(root).getPropertyValue(name).trim() || '#888';
+    const hex = ctx.fillStyle;
+    return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   };
-  const avgLoss = () => data.reduce((s, [x, y]) => s + (forward(x).y - y) ** 2, 0) / data.length;
-
-  function backward() {
-    const dy = 2 * (f.y - ex[1]);
-    const dz = f.z.map((z, j) => dy * p.w2[j] * (z > 0 ? 1 : 0));
-    return {
-      dy,
-      dz,
-      da: p.w2.map((w) => dy * w),
-      w2: f.a.map((a) => dy * a),
-      b2: dy,
-      w1: dz.map((d) => d * f.x),
-      b1: dz,
-    };
-  }
-
-  function update() {
-    for (let j = 0; j < N; j++) {
-      p.w2[j] -= LR * g.w2[j];
-      p.w1[j] -= LR * g.w1[j];
-      p.b1[j] -= LR * g.b1[j];
-    }
-    p.b2 -= LR * g.b2;
-  }
-
-  // Take the next example.
-  function next() {
-    ex = data[Math.floor(pick() * data.length)];
-    f = forward(ex[0]);
-    g = null;
-  }
-
-  function advance() {
-    if (stage === 0) stage = 1;
-    else if (stage === 1) { g = backward(); stage = 2; }
-    else if (stage === 2) {
-      lossBefore = (f.y - ex[1]) ** 2;
-      update();
-      steps += 1;
-      history.push(avgLoss());
-      stage = 3;
-    } else {
-      next();
-      stage = 0;
-    }
-    draw();
-  }
-
-  function train(n) {
-    stopPlay();
-    for (let i = 0; i < n; i++) {
-      next();
-      g = backward();
-      update();
-      steps += 1;
-      history.push(avgLoss());
-    }
-    next();
-    stage = 0;
-    draw();
-  }
-
-  /* The network. */
-  const W = 560;
-  const H = 392;
-  const X_IN = 56;
-  const X_HID = 250;
-  const X_OUT = 420;
-  const X_LOSS = 515;
-  const R = 21;
-  const hy = (j) => 40 + (j * (H - 80)) / (N - 1);
-  const MID = H / 2;
-
-  const edgesIn = [];
-  const edgesOut = [];
-  const edgeLayer = svg('g');
-  for (let j = 0; j < N; j++) {
-    const a = svg('path', { class: 'ia-tr-edge', d: `M${X_IN + R},${MID} L${X_HID - R},${hy(j)}` });
-    const b = svg('path', { class: 'ia-tr-edge', d: `M${X_HID + R},${hy(j)} L${X_OUT - R},${MID}` });
-    edgesIn.push(a);
-    edgesOut.push(b);
-    edgeLayer.append(a, b);
-  }
-  const lossEdge = svg('path', { class: 'ia-tr-edge ia-tr-edge--loss', d: `M${X_OUT + R},${MID} L${X_LOSS - R},${MID}` });
-  edgeLayer.append(lossEdge);
-
-  function node(cx, cy, label, cls = '') {
-    const circle = svg('circle', { class: `ia-tr-node ${cls}`.trim(), cx, cy, r: R });
-    const value = svg('text', { class: 'ia-tr-node__val', x: cx, y: cy + 4, 'text-anchor': 'middle' });
-    const name = svg('text', { class: 'ia-tr-node__name', x: cx, y: cy - R - 6, 'text-anchor': 'middle' }, label);
-    const grad = svg('text', { class: 'ia-tr-node__grad', x: cx, y: cy + R + 13, 'text-anchor': 'middle' });
-    const group = svg('g', { class: 'ia-tr-nodeg' }, [circle, value, name, grad]);
-    return { group, circle, value, name, grad };
-  }
-  const nIn = node(X_IN, MID, 'x', 'is-input');
-  const nHid = Array.from({ length: N }, (_, j) => node(X_HID, hy(j), `h${j + 1}`));
-  const nOut = node(X_OUT, MID, 'ŷ', 'is-output');
-  const nLoss = node(X_LOSS, MID, 'loss', 'is-loss');
-  nHid.forEach((n, j) => {
-    n.group.addEventListener('pointerenter', () => { focus = j; draw(); });
-    n.group.addEventListener('pointerleave', () => { focus = null; draw(); });
-  });
-
-  const net = svg('svg', { viewBox: `0 0 ${W} ${H + 8}`, class: 'ia-tf-plot ia-tr-net', role: 'img', 'aria-label': 'A network with one input, five hidden units and one output' }, [
-    edgeLayer,
-    nIn.group, ...nHid.map((n) => n.group), nOut.group, nLoss.group,
-    svg('text', { class: 'ia-tf-guide-label', x: X_HID, y: H + 6, 'text-anchor': 'middle' }, 'ReLU units'),
+  const edge = svg('path', { class: 'ia-tr-boundary' });
+  const rings = svg('g');
+  const plane = svg('svg', { viewBox: `0 0 ${F.W} ${F.H}`, class: 'ia-tf-plot', role: 'img', 'aria-label': 'Points of two classes, and the region that the network gives to each class' }, [
+    svg('clipPath', { id: 'ia-tr-net-clip' }, [svg('rect', { x: gx(0), y: gy(G), width: gx(G) - gx(0), height: gy(0) - gy(G) })]),
+    svg('g', { 'clip-path': 'url(#ia-tr-net-clip)' }, [shade]),
+    edge,
+    ...data.map(([x0, x1, y]) => svg('circle', { class: `ia-tr-dot ${y ? 'is-pos' : 'is-neg'}`, cx: F.px(x0), cy: F.py(x1), r: 3.6 })),
+    rings,
   ]);
 
-  /* The fit and the loss. */
-  const P = frame(300, 190, [-3.2, 3.2], [-2.6, 2.6], { l: 14, r: 8, t: 10, b: 20 });
-  const fitCurve = svg('path', { class: 'ia-tr-fit' });
-  const exDot = svg('circle', { class: 'ia-tr-ex', r: 6 });
-  const predDot = svg('circle', { class: 'ia-tr-pred', r: 4.5 });
-  const errLine = svg('line', { class: 'ia-tr-resid' });
-  const fitPlot = svg('svg', { viewBox: `0 0 ${P.W} ${P.H}`, class: 'ia-tf-plot', role: 'img', 'aria-label': 'The training points and the curve that the network computes' }, [
-    axes(P, { xLabel: 'x' }),
-    ...data.map(([x, y]) => svg('circle', { class: 'ia-tr-point', cx: P.px(x), cy: P.py(y), r: 3 })),
-    fitCurve, errLine, exDot, predDot,
-  ]);
-  const Q = frame(300, 90, [0, 1], [0, 1], { l: 30, r: 8, t: 8, b: 16 });
+  /* The loss after each step. */
+  const Q = frame(560, 130, [0, MAX_STEPS], [0, 1], { l: 30, r: 8, t: 10, b: 22 });
+  const rawPath = svg('path', { class: 'ia-tr-raw' });
   const lossPath = svg('path', { class: 'ia-tf-plot__curve' });
   const qTop = svg('text', { class: 'ia-tf-guide-label', x: Q.m.l - 4, y: Q.py(1) + 4, 'text-anchor': 'end' });
   const lossPlot = svg('svg', { viewBox: `0 0 ${Q.W} ${Q.H}`, class: 'ia-tf-plot', role: 'img', 'aria-label': 'The average loss after each step' }, [
-    svg('line', { class: 'ia-tf-zero', x1: Q.px(0), x2: Q.px(1), y1: Q.py(0), y2: Q.py(0) }),
-    svg('line', { class: 'ia-tf-zero', x1: Q.px(0), x2: Q.px(0), y1: Q.py(0), y2: Q.py(1) }),
+    axes(Q, { xLabel: 'step' }),
     qTop,
     svg('text', { class: 'ia-tf-guide-label', x: Q.m.l - 4, y: Q.py(0) + 4, 'text-anchor': 'end' }, '0'),
+    rawPath,
     lossPath,
   ]);
-  const stepsOut = el('div', { class: 'ia-anim__label' });
+  const lossOut = el('b', { class: 'ia-tf-num' });
+  const accOut = el('b', { class: 'ia-tf-num' });
+  const stepsOut = el('b', { class: 'ia-tf-num' });
+  const stat = (label, out) => el('div', { class: 'ia-tr-net__stat' }, [el('span', { class: 'ia-anim__label' }, label), out]);
 
-  /* Controls. */
-  const chips = el('div', { class: 'ia-tr-stages' }, STAGES.map((s, i) => el('span', { class: 'ia-tr-stage' }, `${i + 1}. ${s}`)));
-  const nextBtn = el('button', { type: 'button', class: 'ia-tf-btn is-primary', onclick: () => { stopPlay(); advance(); } }, 'Next stage');
-  const playBtn = el('button', { type: 'button', class: 'ia-tf-btn', onclick: () => (timer ? stopPlay() : startPlay()) }, 'Play');
-  const trainBtn = el('button', { type: 'button', class: 'ia-tf-btn', onclick: () => train(100) }, 'Train 100 steps');
-  const resetBtn = el('button', { type: 'button', class: 'ia-tf-btn', onclick: () => { stopPlay(); init(); draw(); } }, 'Reset');
-  const formula = el('div', { class: 'ia-tf-formula ia-tr-net__formula' });
+  const chips = STAGES.map((t, i) => el('span', { class: 'ia-tr-stage' }, `${i + 1}. ${t}`));
   const cap = caption();
+  const stepBtn = el('button', { type: 'button', class: 'ia-tf-btn', onclick: () => stepByStage() }, 'Step');
+  const playBtn = el('button', { type: 'button', class: 'ia-tf-btn is-primary', onclick: () => (raf ? stop() : play()) }, 'Train');
+  const resetBtn = el('button', { type: 'button', class: 'ia-tf-btn', onclick: () => { stop(); init(); draw(); } }, 'Reset');
 
   root.replaceChildren(
-    el('div', { class: 'ia-tf-toolbar' }, [chips, el('span', { class: 'ia-tf-spacer' }), nextBtn, playBtn, trainBtn, resetBtn]),
-    el('div', { class: 'ia-tr-net__cols' }, [
-      el('div', {}, [net]),
-      el('div', { class: 'ia-tr-net__side' }, [
-        el('div', { class: 'ia-anim__label' }, 'The curve of the network'),
-        fitPlot,
-        stepsOut,
-        lossPlot,
-      ]),
-    ]),
+    el('div', { class: 'ia-tf-toolbar' }, [el('div', { class: 'ia-tr-stages' }, chips), el('span', { class: 'ia-tf-spacer' }), stepBtn, playBtn, resetBtn]),
+    el('div', { class: 'ia-tr-net__cols' }, [net, plane]),
     cap,
-    formula,
+    el('div', { class: 'ia-tr-net__loss' }, [
+      el('div', { class: 'ia-tr-net__stats' }, [stat('Step', stepsOut), stat('Loss', lossOut), stat('Accuracy', accOut)]),
+      lossPlot,
+    ]),
   );
 
-  function startPlay() {
+  function play() {
+    stop();
+    if (steps >= MAX_STEPS) init();
     playBtn.textContent = 'Pause';
     playBtn.setAttribute('aria-pressed', 'true');
-    advance();
-    timer = setInterval(advance, 1300);
+    const tick = () => {
+      for (let n = 0; n < STEPS_PER_FRAME && steps < MAX_STEPS; n++) step();
+      draw();
+      raf = steps < MAX_STEPS ? requestAnimationFrame(tick) : (stop(), null);
+    };
+    raf = requestAnimationFrame(tick);
   }
 
-  function stopPlay() {
-    if (timer) clearInterval(timer);
-    timer = null;
-    playBtn.textContent = 'Play';
+  function stepByStage() {
+    if (walk) return;
+    stop();
+    if (steps >= MAX_STEPS) init();
+    batch = sampleBatch();
+    const run = (s) => {
+      if (s === STAGES.length) {
+        walk = null;
+        stop();
+        draw();
+        return;
+      }
+      stage = s;
+      if (s === 2) grads = gradients(batch);
+      if (s === 3) update(grads);
+      draw();
+      walk = setTimeout(() => run(s + 1), 1200);
+    };
+    run(0);
+  }
+
+  function stop() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
+    if (walk) clearTimeout(walk);
+    walk = null;
+    stage = -1;
+    batch = null;
+    grads = null;
+    playBtn.textContent = steps >= MAX_STEPS ? 'Train again' : 'Train';
     playBtn.setAttribute('aria-pressed', 'false');
   }
 
-  const signColor = (v) => (v >= 0 ? 'var(--tf-pos)' : 'var(--tf-neg)');
-
-  function paintEdge(edge, value, scale, dir, off) {
-    edge.style.stroke = signColor(value);
-    edge.style.strokeWidth = (0.8 + Math.min(Math.abs(value) * scale, 5)).toFixed(2);
-    edge.classList.toggle('is-off', off);
-    edge.classList.toggle('is-fwd', dir === 1 && !off);
-    edge.classList.toggle('is-bwd', dir === -1 && !off);
-  }
-
   function draw() {
-    chips.querySelectorAll('.ia-tr-stage').forEach((c, i) => c.classList.toggle('is-on', i === stage));
-    nextBtn.textContent = stage === 3 ? 'Next example' : `Next: ${STAGES[stage + 1]}`;
+    chips.forEach((c, i) => c.classList.toggle('is-on', i === stage));
 
-    // Edges show the weights in the forward stages, and the gradients in the backward stage.
-    for (let j = 0; j < N; j++) {
-      const off = f.z[j] <= 0;
-      if (stage === 2) {
-        paintEdge(edgesIn[j], g.w1[j], 2.5, -1, off);
-        paintEdge(edgesOut[j], g.w2[j], 2.5, -1, false);
-      } else {
-        paintEdge(edgesIn[j], p.w1[j], 1.6, stage === 0 ? 1 : 0, false);
-        paintEdge(edgesOut[j], p.w2[j], 3, stage === 0 ? 1 : 0, off && stage === 0);
+    // The lines show the weights, and in the backward part, the gradients.
+    const showGrads = stage === 2;
+    const gMax = showGrads ? Math.max(1e-9, ...grads.flatMap((g) => g.W.flat().map(Math.abs))) : 1;
+    layers.forEach((l, k) => l.W.forEach((row, i) => row.forEach((w, j) => {
+      const v = showGrads ? grads[k].W[i][j] : w;
+      const width = showGrads ? 0.6 + (4.4 * Math.abs(v)) / gMax : 0.6 + Math.min(Math.abs(v) * 1.5, 5);
+      const wire = wires[k][i][j];
+      wire.style.stroke = v >= 0 ? 'var(--tf-pos)' : 'var(--tf-neg)';
+      wire.style.strokeWidth = width.toFixed(2);
+      wire.classList.toggle('is-fwd', stage === 0);
+      wire.classList.toggle('is-bwd', stage === 2);
+    })));
+
+    rings.replaceChildren(...(batch ? batch.map(([x0, x1]) => svg('circle', { class: 'ia-tr-ring', cx: F.px(x0), cy: F.py(x1), r: 7 })) : []));
+    cap.textContent = [
+      `Forward. The network computes p for a batch of ${BATCH} points, marked with rings.`,
+      stage === 1 && `Loss. The average loss on the batch is ${fmt(batchLoss(batch), 3)}.`,
+      'Backward. Backpropagation finds the gradient of the loss for each weight, and the lines now show the gradients.',
+      `Optimizer. Each weight moves a small step against its gradient, with η = ${LR}, and the boundary moves with the weights.`,
+    ][stage] ?? '';
+
+    // The logit at each corner of the grid.
+    const v = Array.from({ length: G + 1 }, (_, i) => Array.from({ length: G + 1 }, (_, j) => logit(-R + (2 * R * i) / G, -R + (2 * R * j) / G)));
+    const pos = rgb('--tf-pos');
+    const neg = rgb('--tf-neg');
+    const img = ctx.createImageData(G + 1, G + 1);
+    for (let i = 0; i <= G; i++) {
+      for (let j = 0; j <= G; j++) {
+        const p = sigmoid(v[i][j]);
+        const o = 4 * ((G - j) * (G + 1) + i);
+        img.data.set([...(p > 0.5 ? pos : neg), Math.round(255 * (0.08 + 0.32 * Math.abs(2 * p - 1)))], o);
       }
     }
-    lossEdge.classList.toggle('is-fwd', stage === 1);
-    lossEdge.classList.toggle('is-bwd', stage === 2);
+    ctx.putImageData(img, 0, 0);
+    shade.setAttribute('href', canvas.toDataURL());
 
-    // Nodes. After the update, they show a new forward pass with the new weights.
-    const shown = stage === 3 ? forward(ex[0]) : f;
-    nIn.value.textContent = fmt(f.x);
-    nIn.grad.textContent = '';
-    nHid.forEach((n, j) => {
-      const off = shown.z[j] <= 0;
-      n.value.textContent = fmt(shown.a[j]);
-      n.circle.classList.toggle('is-off', off);
-      n.group.classList.toggle('is-focus', focus === j);
-      n.grad.textContent = stage === 2 ? `∂ ${fmt(g.dz[j])}` : (off ? 'off' : '');
-    });
-    nOut.value.textContent = fmt(shown.y);
-    nOut.grad.textContent = stage === 2 ? `∂ ${fmt(g.dy)}` : `y = ${fmt(ex[1])}`;
-    const l = (f.y - ex[1]) ** 2;
-    nLoss.value.textContent = stage >= 1 ? fmt((shown.y - ex[1]) ** 2) : '';
-    nLoss.circle.classList.toggle('is-on', stage >= 1);
+    // The boundary, where the logit is 0, by marching squares.
+    const cross = (i0, j0, i1, j1) => {
+      const s = v[i0][j0] / (v[i0][j0] - v[i1][j1]);
+      return `${F.px(-R + (2 * R * (i0 + s * (i1 - i0))) / G).toFixed(1)},${F.py(-R + (2 * R * (j0 + s * (j1 - j0))) / G).toFixed(1)}`;
+    };
+    let d = '';
+    for (let i = 0; i < G; i++) {
+      for (let j = 0; j < G; j++) {
+        const hits = [[i, j, i + 1, j], [i + 1, j, i + 1, j + 1], [i, j + 1, i + 1, j + 1], [i, j, i, j + 1]]
+          .filter(([a, b, c, e]) => (v[a][b] > 0) !== (v[c][e] > 0))
+          .map((e) => cross(...e));
+        for (let h = 0; h + 1 < hits.length; h += 2) d += `M${hits[h]}L${hits[h + 1]}`;
+      }
+    }
+    edge.setAttribute('d', d);
 
-    // The fit, the example and the loss history.
-    const xs = Array.from({ length: 161 }, (_, i) => -3.2 + (6.4 * i) / 160);
-    fitCurve.setAttribute('d', pathOf(P, xs.map((x) => [x, clamp(forward(x).y, -2.6, 2.6)])));
-    const now = forward(ex[0]).y;
-    exDot.setAttribute('cx', P.px(ex[0])); exDot.setAttribute('cy', P.py(ex[1]));
-    predDot.setAttribute('cx', P.px(ex[0])); predDot.setAttribute('cy', P.py(clamp(now, -2.6, 2.6)));
-    errLine.setAttribute('x1', P.px(ex[0])); errLine.setAttribute('x2', P.px(ex[0]));
-    errLine.setAttribute('y1', P.py(ex[1])); errLine.setAttribute('y2', P.py(clamp(now, -2.6, 2.6)));
     const top = Math.max(...history);
     qTop.textContent = fmt(top, 1);
-    const n = Math.max(history.length - 1, 1);
-    lossPath.setAttribute('d', pathOf(Q, history.map((v, i) => [i / n, v / top])));
-    stepsOut.textContent = `Average loss, after ${steps} step${steps === 1 ? '' : 's'}`;
-
-    // The caption and the numbers of one unit.
-    const j = focus ?? f.a.reduce((best, a, k) => (Math.abs(a * p.w2[k]) > Math.abs(f.a[best] * p.w2[best]) ? k : best), 0);
-    const u = `h${j + 1}`;
-    if (stage === 0) {
-      cap.textContent = `Forward. The example is x = ${fmt(f.x)}, and its target is y = ${fmt(ex[1])}. Each unit computes w·x + b and a ReLU, and the output adds the units with its own weights, so ŷ = ${fmt(f.y)}. The edges show the weights, with orange for positive and blue for negative.`;
-      formula.textContent = `${u}: z = ${fmt(p.w1[j])} × ${fmt(f.x)} + ${fmt(p.b1[j])} = ${fmt(f.z[j])}, and ReLU(z) = ${fmt(f.a[j])}${f.z[j] <= 0 ? ', so the unit is off for this input' : ''}.`;
-    } else if (stage === 1) {
-      cap.textContent = `Loss. The loss compares the output with the target: (ŷ − y)² = (${fmt(f.y)} − ${fmt(ex[1])})² = ${fmt(l, 3)}.`;
-      formula.textContent = 'In the plot, the line from the ring (the target) to the dot (the output) is the error for this example.';
-    } else if (stage === 2) {
-      const offs = f.z.filter((z) => z <= 0).length;
-      cap.textContent = `Backward. The slope of the loss for ŷ is 2(ŷ − y) = ${fmt(g.dy)}. Backpropagation sends it back along each edge, and multiplies it by the weight of the edge and by the slope of the ReLU. The edges now show the gradients.${offs ? ` ${offs} unit${offs > 1 ? 's are' : ' is'} off, so the ReLU slope is 0, and no gradient goes through ${offs > 1 ? 'them' : 'it'}.` : ''}`;
-      formula.textContent = `${u}: ∂loss/∂${u} = ${fmt(g.dy)} × ${fmt(p.w2[j])} × ${f.z[j] > 0 ? 1 : 0} = ${fmt(g.dz[j])}, and the gradient of its input weight is ${fmt(g.dz[j])} × x = ${fmt(g.w1[j])}.`;
-    } else {
-      cap.textContent = `Update. Each weight moves a small step against its gradient, w ← w − η·g, with η = ${LR}. The new forward pass gives ŷ = ${fmt(now)}, so the loss on this example ${(now - ex[1]) ** 2 < lossBefore ? 'falls' : 'changes'} from ${fmt(lossBefore, 3)} to ${fmt((now - ex[1]) ** 2, 3)}, and the curve moves a little toward the point.`;
-      formula.textContent = `${u}: the input weight moves by −${LR} × ${fmt(g.w1[j])} = ${fmt(-LR * g.w1[j], 3)}, and the output weight by −${LR} × ${fmt(g.w2[j])} = ${fmt(-LR * g.w2[j], 3)}.`;
-    }
+    rawPath.setAttribute('d', pathOf(Q, history.map((l, i) => [i, l / top])));
+    // The bold line is a moving average, as training plots usually show.
+    let avg = history[0];
+    lossPath.setAttribute('d', pathOf(Q, history.map((l, i) => { avg = 0.95 * avg + 0.05 * l; return [i, avg / top]; })));
+    stepsOut.textContent = String(steps);
+    lossOut.textContent = fmt(history[history.length - 1], 3);
+    accOut.textContent = pct(accuracy(), 0);
   }
 
   init();

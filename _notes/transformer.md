@@ -18,7 +18,7 @@ The sentence is `the cat saw the hat` from the [BPE note](/notes/bpe-tokenizer.h
 
 {% include components/tf.html diagram="explorer" %}
 
-In the view, each token is a colored lane that goes from left to right through the model. The view shows one layer, and a real model repeats the layer N times. You can select a part to zoom in and see what is inside it, and you can use the arrow keys to go from part to part. You can also play a pass through the model, or open the view in full screen.
+In the view, each token is a colored lane that goes from left to right through the model. The view shows one layer, and a real model repeats the layer N times.
 
 ## Contents
 
@@ -85,7 +85,7 @@ The addition is called a residual connection. It comes from [Deep Residual Learn
 
 RMSNorm gives every vector the same norm before a part reads it. The norm of a vector is one number that tells how large its numbers are. (Every vector has the same count of numbers, `d_model`.)
 
-The vectors need the same norm for two reasons. First, the tokens have different norms from the start, because each row of the embedding table is learned on its own. Second, the numbers in the stream can become very large or very small after many additions. RMSNorm divides a vector by its RMS (root mean square), which makes the norms equal.{% include components/sidenote.html id="sn-prenorm" label="2" text="The original transformer normalized the stream after each addition, so the direct path from note 1 went through a norm in every layer, and deep models of that kind need a slow warm-up of the learning rate before they train well. Here the model normalizes only the copy that a part reads, and the stream path has no norm on it ([Xiong and others, 2020](https://arxiv.org/abs/2002.04745))." %}
+The vectors need the same norm for two reasons. First, the tokens have different norms from the start, because each row of the embedding table is learned on its own. Second, the numbers in the stream can become very large or very small after many additions. RMSNorm divides a vector by its RMS (root mean square), which makes the norms equal.{% include components/sidenote.html id="sn-prenorm" label="2" text="The original transformer normalized the stream after each addition, so the direct path from note 1 went through a norm in every layer, and deep models of that kind need a slow warm-up of the learning rate before they train well. Here the model normalizes only the copy that a part reads, and the stream path has no norm on it." %}
 
 $$
 \text{RMS}(x) = \sqrt{\frac{1}{d}\sum_{i=1}^{d} x_i^2 + \varepsilon}
@@ -93,7 +93,7 @@ $$
 \text{RMSNorm}(x)_i = \frac{x_i}{\text{RMS}(x)} \, g_i
 $$
 
-The small number $\varepsilon$ stops a division by zero. The weights $g_i$ let the model make some numbers larger than others, and the diagram leaves them out. In the diagram, you can drag the bars of the input, and you can make the whole input larger or smaller.
+The small number $\varepsilon$ stops a division by zero. The weights $g_i$ let the model make some numbers larger than others, and the diagram leaves them out.
 
 {% include components/tf.html diagram="rmsnorm" %}
 
@@ -115,7 +115,7 @@ Each token makes three vectors from its stream vector:
 | Key | What does the token contain? |
 | Value | What information does the token give? |
 
-The score of token A for token B is the dot product of the query of A and the key of B, divided by $\sqrt{d_k}$, where $d_k$ is the length of a key. A high score means that B has what A looks for. The division keeps the scores in a steady range.{% include components/sidenote.html id="sn-scale" label="3" text="If the numbers of $q$ and $k$ are independent, with mean 0 and variance 1, then $q \cdot k$ has variance $d_k$, so its typical size grows as $\sqrt{d_k}$. The division brings the typical size back to about 1 for any head size. Without the division, the scores are large and softmax is almost one-hot, so its gradient is almost 0 and the attention stops learning." %} The dot product as a score comes from [Effective Approaches to Attention-based Neural Machine Translation](https://arxiv.org/abs/1508.04025) (Luong and others, 2015), and the division comes from the transformer paper.
+The score of token A for token B is the dot product of the query of A and the key of B, divided by $\sqrt{d_k}$, where $d_k$ is the length of a key. A high score means that B has what A looks for. The division keeps the scores in a steady range.{% include components/sidenote.html id="sn-scale" label="3" text="If the numbers of $q$ and $k$ are independent, with mean 0 and variance 1, then $q \cdot k$ has variance $d_k$, so its typical size grows as $\sqrt{d_k}$. The division brings the typical size back to about 1 for any head size. Without the division, the scores are large and softmax is almost one-hot, so its gradient is almost 0 and the attention stops learning." %} The division comes from the transformer paper.
 
 $$
 \text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right) V
@@ -123,13 +123,13 @@ $$
 
 A token must not look at the tokens after it, because the model must guess the later tokens.{% include components/sidenote.html id="sn-parallel" label="4" text="The mask also makes training fast. A model that reads the text one token at a time must wait for each step. With the mask, each position sees only the tokens before it, so one pass over $T$ tokens gives $T$ next-token guesses at the same time, and no guess can see the token that it must guess." %} The causal mask removes the scores for later tokens before the softmax. Softmax then changes each row of scores into weights that are 0 or more and that add up to 1.
 
-The diagram shows the four steps of attention for four heads. Select a token or a row to see its attention.
+The diagram shows the four steps of attention for four heads.
 
 {% include components/tf.html diagram="attention" %}
 
 A model has many heads in each layer, and each head has its own queries, keys and values, so each head can look for a different kind of information.{% include components/sidenote.html id="sn-heads" label="5" text="A softmax gives one weighted average, so one head that needs information from two different tokens must split its weight between them and gets a mix of both. With $h$ heads of size $d/h$, a token can take one kind of information from one token and another kind from a different token. The $h$ heads together have the same number of weights as one head of size $d$, so the extra heads cost almost nothing." %} The model joins the outputs of all the heads, and one more matrix mixes them into one vector for each token. The transformer paper calls the heads multi-head attention.
 
-The four heads in the diagram show patterns that trained models often have, e.g., one head looks at the token before, and one head looks at the first token.{% include components/sidenote.html id="sn-sink" label="6" text="The weights of each row must add up to 1, so a head must put its weight somewhere, even when no token has what it looks for. Trained models often put that weight on the first token, which every token can see. [Xiao and others (2023)](https://arxiv.org/abs/2309.17453) call such tokens attention sinks, and they found that a model gets much worse when the first tokens are taken out of its view." %} The numbers in the diagram are made up.
+The four heads in the diagram show patterns that trained models often have, e.g., one head looks at the token before, and one head looks at the first token.{% include components/sidenote.html id="sn-sink" label="6" text="The weights of each row must add up to 1, so a head must put its weight somewhere, even when no token has what it looks for. Trained models often put that weight on the first token, which every token can see. Such tokens are called attention sinks, and a model gets much worse when the first tokens are taken out of its view." %} The numbers in the diagram are made up.
 
 ## Positions with RoPE
 
@@ -151,7 +151,7 @@ The symbol $\odot$ means that the two vectors are multiplied one number at a tim
 
 {% include components/tf.html diagram="swiglu" %}
 
-For a large positive number, SiLU gives almost the same number, and for a large negative number, it gives almost 0. Between the two, the curve goes a little below 0, and you can find the low point in the diagram.
+For a large positive number, SiLU gives almost the same number, and for a large negative number, it gives almost 0. Between the two, the curve goes a little below 0.
 
 SwiGLU comes from [GLU Variants Improve Transformer](https://arxiv.org/abs/2002.05202) (Shazeer, 2020). The original transformer used a simpler feed-forward layer without a gate.
 
@@ -285,4 +285,4 @@ $$
 \text{time} \approx \frac{3F \cdot S}{\text{MFU} \cdot \text{peak FLOP/s}}
 $$
 
-The peak FLOP/s is the speed of the hardware. The MFU (model FLOPs utilization) is the fraction of the peak that the training gets in practice, from [PaLM](https://arxiv.org/abs/2204.02311) (Chowdhery and others, 2022). Since the forward pass is about $2P$ FLOPs for each token, training is about $6P$ FLOPs for each token. [Scaling Laws for Neural Language Models](https://arxiv.org/abs/2001.08361) (Kaplan and others, 2020) uses the same rule, $C \approx 6ND$, where $C$ is the training FLOPs, $N$ is the number of weights without the embeddings, and $D$ is the number of training tokens.
+The peak FLOP/s is the speed of the hardware. The MFU (model FLOPs utilization) is the fraction of the peak that the training gets in practice. Since the forward pass is about $2P$ FLOPs for each token, training is about $6P$ FLOPs for each token. [Scaling Laws for Neural Language Models](https://arxiv.org/abs/2001.08361) (Kaplan and others, 2020) uses the same rule, $C \approx 6ND$, where $C$ is the training FLOPs, $N$ is the number of weights without the embeddings, and $D$ is the number of training tokens.

@@ -25,14 +25,25 @@
 /* A small network */
 .ia-tr-net__cols {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.2rem;
-  align-items: start;
+  align-items: center;
 }
 
-.ia-tr-net__side .ia-anim__label { margin: 0.2rem 0 0.2rem; }
-.ia-tr-net__side .ia-anim__label b { font-size: inherit; }
-.ia-tr-net__formula { margin-top: 0; min-height: 1.8em; }
+.ia-tr-net__loss {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: center;
+  margin-top: 0.8rem;
+}
+
+.ia-tr-net__stats { display: grid; gap: 0.6rem; }
+.ia-tr-net__stat { display: grid; gap: 0.15rem; }
+.ia-tr-net__stat .ia-anim__label { margin: 0; }
+.ia-tr-net__stat b { font-size: 1.15rem; }
+
+.ia-tr--network .ia-tf-caption { min-height: 1.6em; }
 
 .ia-tr-stages { display: flex; flex-wrap: wrap; gap: 4px; }
 
@@ -53,51 +64,30 @@
   font-weight: 600;
 }
 
-.ia-tr-edge {
-  fill: none;
-  stroke: var(--tf-grid);
-  stroke-linecap: round;
-  opacity: 0.75;
-  transition: stroke-width 400ms ease, opacity 300ms ease;
-}
-
-.ia-tr-edge--loss { stroke: var(--ia-muted); stroke-width: 1.5; }
-.ia-tr-edge.is-off { opacity: 0.12; }
-.ia-tr-edge.is-fwd,
-.ia-tr-edge.is-bwd { stroke-dasharray: 7 6; opacity: 0.95; }
-.ia-tr-edge.is-fwd { animation: ia-tr-flow 0.9s linear infinite; }
-.ia-tr-edge.is-bwd { animation: ia-tr-flow 0.9s linear infinite reverse; }
+.ia-tr-wire { stroke-linecap: round; opacity: 0.8; transition: stroke-width 300ms ease; }
+.ia-tr-wire.is-fwd,
+.ia-tr-wire.is-bwd { stroke-dasharray: 7 6; opacity: 0.95; }
+.ia-tr-wire.is-fwd { animation: ia-tr-flow 0.9s linear infinite; }
+.ia-tr-wire.is-bwd { animation: ia-tr-flow 0.9s linear infinite reverse; }
 
 @keyframes ia-tr-flow {
   from { stroke-dashoffset: 13; }
   to { stroke-dashoffset: 0; }
 }
 
-.ia-tr-node {
-  fill: var(--tf-panel);
-  stroke: var(--ia-text);
-  stroke-width: 1.5;
-  transition: opacity 300ms ease, stroke 300ms ease;
-}
-
-.ia-tr-node.is-input { stroke: var(--tf-t0); }
-.ia-tr-node.is-output { stroke: var(--tf-t2); }
-.ia-tr-node.is-loss { stroke: var(--ia-muted); stroke-dasharray: 3 3; }
-.ia-tr-node.is-loss.is-on { stroke: var(--tf-t4); stroke-dasharray: none; }
-.ia-tr-node.is-off { opacity: 0.4; stroke-dasharray: 3 3; }
-.ia-tr-nodeg { cursor: default; }
-.ia-tr-nodeg.is-focus .ia-tr-node { stroke-width: 3; }
-.ia-tr-node__val { font-family: var(--ia-font-mono); font-size: 11px; fill: var(--ia-text); }
-.ia-tr-node__name { font-family: var(--ia-font-sans); font-size: 11px; font-weight: 600; fill: var(--ia-muted); }
-.ia-tr-node__grad { font-family: var(--ia-font-mono); font-size: 10px; fill: var(--ia-muted); }
-
-.ia-tr-ex { fill: none; stroke: var(--ia-text); stroke-width: 2; }
-.ia-tr-pred { fill: var(--tf-t1); }
-
 @media (prefers-reduced-motion: reduce) {
-  .ia-tr-edge.is-fwd,
-  .ia-tr-edge.is-bwd { animation: none; }
+  .ia-tr-wire.is-fwd,
+  .ia-tr-wire.is-bwd { animation: none; }
 }
+
+.ia-tr-ring { fill: none; stroke: var(--ia-text); stroke-width: 1.8; }
+.ia-tr-unit { fill: var(--tf-panel); stroke: var(--ia-text); stroke-width: 1.5; }
+.ia-tr-unit__name { font-family: var(--ia-font-mono); font-size: 11px; fill: var(--ia-text); }
+.ia-tr-raw { fill: none; stroke: var(--tf-ffn); stroke-width: 1; opacity: 0.3; }
+.ia-tr-boundary { fill: none; stroke: var(--ia-text); stroke-width: 2; stroke-linecap: round; }
+.ia-tr-dot { stroke: var(--tf-panel); stroke-width: 1.2; }
+.ia-tr-dot.is-pos { fill: var(--tf-pos); }
+.ia-tr-dot.is-neg { fill: var(--tf-neg); }
 
 /* Activation */
 .ia-tr-act__wrap {
@@ -206,6 +196,8 @@
   .ia-tr-two,
   .ia-tr-net__cols,
   .ia-tr-act__wrap { grid-template-columns: minmax(0, 1fr); }
+  .ia-tr-net__loss { grid-template-columns: minmax(0, 1fr); }
+  .ia-tr-net__stats { display: flex; gap: 1.4rem; }
   .ia-tr-act__side { grid-template-columns: 8rem minmax(0, 1fr); align-items: end; column-gap: 1rem; }
   .ia-tr-slider { min-width: 100%; }
   .ia-tr-batch { grid-template-columns: 4.6rem repeat(5, minmax(0, 1fr)); gap: 0.3rem; }
