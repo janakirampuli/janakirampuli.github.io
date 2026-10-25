@@ -14,7 +14,7 @@ permalink: /resume/
 
 **Software Engineer, WarpBuild**
 
-**Interests:** Deep Learning & Machine Learning · Distributed Systems · Agentic Systems
+**Interests:** Deep Learning & Machine Learning · Distributed Systems
 
 ---
 
