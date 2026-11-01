@@ -7,6 +7,7 @@
   --hd-border: rgba(28, 25, 23, 0.16);
   --hd-raw: #a8a39a;
   --hd-band: rgba(28, 25, 23, 0.08);
+  --hd-ideal: rgba(12, 163, 12, 0.32);
   --hd-s1: #2a78d6;
   --hd-s2: #eb6834;
   --hd-s3: #1baf7a;
@@ -43,6 +44,7 @@ html.dark-mode .hd {
   --hd-border: rgba(255, 255, 255, 0.16);
   --hd-raw: #6d6962;
   --hd-band: rgba(255, 255, 255, 0.09);
+  --hd-ideal: rgba(12, 163, 12, 0.45);
   --hd-s1: #3987e5;
   --hd-s2: #d95926;
   --hd-s3: #199e70;
@@ -148,6 +150,15 @@ html.dark-mode .hd {
   width: 10px;
 }
 
+.hd-swatch--dot {
+  background: var(--hd-s1);
+  border-radius: 50%;
+}
+
+.hd-swatch--ideal {
+  background: var(--hd-ideal);
+}
+
 .hd-swatch--hit {
   background: var(--hd-good);
 }
@@ -224,6 +235,36 @@ html.dark-mode .hd {
 
 .hd-chart--wide {
   grid-column: 1 / -1;
+}
+
+.hd-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 2px;
+}
+
+.hd-tabs button {
+  background: transparent;
+  border: 1px solid var(--hd-border);
+  border-radius: 4px;
+  color: var(--hd-ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85em;
+  min-height: 32px;
+  padding: 2px 12px;
+}
+
+.hd-tabs button[aria-pressed="true"] {
+  border-color: var(--hd-ink);
+  color: var(--hd-ink);
+  font-weight: 700;
+}
+
+.hd-tabs button:focus-visible {
+  outline: 2px solid var(--hd-ink);
+  outline-offset: 2px;
 }
 
 .hd-frame {

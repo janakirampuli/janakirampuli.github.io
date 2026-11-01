@@ -496,6 +496,11 @@ const HRV_ZONES = [
   { below: Infinity, label: 'Excellent (>100)', color: good },
 ];
 
+const stageTrend = (name, key, sub, range) => ({
+  name,
+  ...daily(key, name, sub, hours, { zeroBase: true, range, formatAxis: (v) => `${v}h` }),
+});
+
 const SECTIONS = [
   {
     title: '1. Sleep',
@@ -523,18 +528,29 @@ const SECTIONS = [
           { key: 'awake', label: 'Awake', color: s4 },
         ],
       },
-      daily('deep', 'Deep sleep', 'Hours per night', hours, {
-        zeroBase: true, inRangeCount: true, range: { low: 1, high: 2, label: 'Ideal: 1-2 h' }, formatAxis: (v) => `${v}h`,
-      }),
-      daily('rem', 'REM sleep', 'Hours per night', hours, {
-        zeroBase: true, inRangeCount: true, range: { low: 1.5, high: 2, label: 'Ideal: 1.5-2 h' }, formatAxis: (v) => `${v}h`,
-      }),
-      daily('core', 'Core sleep', 'Hours per night. Usually about half of total sleep.', hours, {
-        zeroBase: true, formatAxis: (v) => `${v}h`,
-      }),
-      daily('awake', 'Awake during the night', 'Hours per night', hours, {
-        zeroBase: true, inRangeCount: true, range: { low: 0, high: 0.5, label: 'Ideal: under 30 min' }, formatAxis: (v) => `${v}h`,
-      }),
+      {
+        kind: 'profile',
+        wide: true,
+        title: 'Sleep stages vs ideal',
+        sub: 'Average hours per night',
+        rows: [
+          { key: 'deep', label: 'Deep', low: 1, high: 2, ideal: '1-2 h' },
+          { key: 'rem', label: 'REM', low: 1.5, high: 2, ideal: '1.5-2 h' },
+          { key: 'core', label: 'Core', ideal: null },
+          { key: 'awake', label: 'Awake', low: 0, high: 0.5, ideal: 'Under 30 min' },
+        ],
+      },
+      {
+        kind: 'switch',
+        wide: true,
+        title: 'Stage trend',
+        options: [
+          stageTrend('Deep', 'deep', 'Hours per night', { low: 1, high: 2, label: 'Ideal: 1-2 h' }),
+          stageTrend('REM', 'rem', 'Hours per night', { low: 1.5, high: 2, label: 'Ideal: 1.5-2 h' }),
+          stageTrend('Core', 'core', 'Hours per night. Usually about half of total sleep.'),
+          stageTrend('Awake', 'awake', 'Hours per night', { low: 0, high: 0.5, label: 'Ideal: under 30 min' }),
+        ],
+      },
       trends('Heart rate during sleep', 'Beats per minute, 7-day average', bpm, [
         { key: 'sleep_hr_ma', label: 'Average', color: s2 },
         { key: 'sleep_hr_low_ma', label: 'Lowest', color: s1 },
@@ -642,30 +658,156 @@ function fromFirstReading(days, chart) {
   return first > 0 ? days.slice(first) : days;
 }
 
-function inRangeNote(chart, days) {
-  if (!chart.inRangeCount) return '';
-  const values = days.map((day) => day[chart.series[0].key]).filter(Number.isFinite);
-  const hits = values.filter((v) => v >= chart.range.low && v <= chart.range.high).length;
-  return `. In range on ${hits} of ${values.length} nights.`;
+function profileRows(chart, days) {
+  return chart.rows.map((row) => {
+    const values = days.map((day) => day[row.key]).filter(Number.isFinite);
+    const average = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    const hits = row.ideal ? values.filter((v) => v >= row.low && v <= row.high).length : null;
+    return { ...row, average, hits, count: values.length };
+  }).filter((row) => row.average !== null);
+}
+
+function renderProfile(frame, chart, rows, width) {
+  const narrow = width < 520;
+  const left = narrow ? 76 : 96;
+  const right = narrow ? 44 : 104;
+  const rowHeight = 40;
+  const axisHeight = 24;
+  const height = rows.length * rowHeight + axisHeight;
+  const inner = width - left - right;
+  const ticks = niceTicks(0, Math.max(...rows.map((row) => Math.max(row.average, row.high ?? 0))), [1, 2, 5, 10], 5);
+  const max = ticks[ticks.length - 1];
+  const x = (v) => left + (v / max) * inner;
+  const node = svg('svg', {
+    class: 'hd-plot',
+    viewBox: `0 0 ${width} ${height}`,
+    role: 'img',
+    tabindex: '0',
+    'aria-label': rows.map((row) => `${row.label}: average ${hours(row.average)}${row.ideal ? `, ideal ${row.ideal}, in range ${row.hits} of ${row.count} nights` : ''}`).join('. '),
+  });
+
+  ticks.forEach((tick) => {
+    svg('line', {
+      x1: x(tick), x2: x(tick), y1: 0, y2: rows.length * rowHeight, stroke: 'var(--hd-grid)', 'stroke-width': 1,
+    }, node);
+    const label = svg('text', { x: x(tick), y: height - 6, 'text-anchor': 'middle' }, node);
+    label.textContent = `${tick}h`;
+  });
+
+  rows.forEach((row, index) => {
+    const middle = index * rowHeight + rowHeight / 2;
+    const name = svg('text', { class: 'hd-end', x: 0, y: middle - 1 }, node);
+    name.textContent = row.label;
+    const value = svg('text', { x: 0, y: middle + 13 }, node);
+    value.textContent = hours(row.average);
+    svg('line', {
+      x1: x(0), x2: x(max), y1: middle, y2: middle, stroke: 'var(--hd-axis)', 'stroke-width': 1,
+    }, node);
+    if (row.ideal) {
+      svg('rect', {
+        x: x(row.low), y: middle - 9, width: x(row.high) - x(row.low), height: 18, rx: 3, fill: 'var(--hd-ideal)',
+      }, node);
+    }
+    svg('circle', {
+      cx: x(row.average), cy: middle, r: 6, fill: 'var(--hd-s1)', stroke: 'var(--hd-surface)', 'stroke-width': 2,
+    }, node);
+    const tally = svg('text', { x: width, y: middle + 4, 'text-anchor': 'end' }, node);
+    if (row.ideal) tally.textContent = narrow ? `${row.hits}/${row.count}` : `${row.hits}/${row.count} nights`;
+  });
+  frame.appendChild(node);
+
+  const tip = html('div', 'hd-tip', undefined, frame);
+  tip.hidden = true;
+  const show = (event) => {
+    const rect = node.getBoundingClientRect();
+    const row = rows[Math.floor(((event.clientY - rect.top) / rect.height) * height / rowHeight)];
+    if (!row) { tip.hidden = true; return; }
+    tip.replaceChildren();
+    html('div', 'hd-tip__date', row.label, tip);
+    html('div', '', `Average ${hours(row.average)}`, tip);
+    html('div', 'hd-tip__name', row.ideal ? `Ideal ${row.ideal}, in range on ${row.hits} of ${row.count} nights` : 'No fixed ideal. Usually about half of sleep.', tip);
+    tip.hidden = false;
+    const px = event.clientX - rect.left;
+    const position = px + 12 + tip.offsetWidth > frame.clientWidth ? px - tip.offsetWidth - 12 : px + 12;
+    tip.style.transform = `translate(${Math.max(0, position)}px, ${event.clientY - rect.top + 10}px)`;
+  };
+  node.addEventListener('pointermove', show);
+  node.addEventListener('pointerdown', show);
+  node.addEventListener('pointerleave', () => { tip.hidden = true; });
+}
+
+const selectedOption = new Map();
+
+function addSwitchChart(grid, chart, allDays) {
+  const options = chart.options
+    .map((option) => ({ option, days: fromFirstReading(allDays, option) }))
+    .filter(({ option, days }) => hasData(days, option));
+  if (options.length === 0) return null;
+
+  const figure = html('figure', 'hd-chart hd-chart--wide', undefined, grid);
+  const caption = html('figcaption', '', undefined, figure);
+  html('span', 'hd-chart__title', chart.title, caption);
+  const sub = html('span', 'hd-chart__sub', undefined, caption);
+  const tabs = html('div', 'hd-tabs', undefined, figure);
+  tabs.setAttribute('role', 'group');
+  tabs.setAttribute('aria-label', `${chart.title} stage`);
+  const legendSlot = html('div', '', undefined, figure);
+  const frame = html('div', 'hd-frame', undefined, figure);
+
+  const draw = () => {
+    const name = selectedOption.get(chart.title);
+    const { option, days } = options.find(({ option: o }) => o.name === name) ?? options[0];
+    sub.textContent = option.sub;
+    [...tabs.children].forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.textContent === option.name));
+    });
+    legendSlot.replaceChildren();
+    legend(legendSlot, option);
+    frame.replaceChildren();
+    renderLine(frame, option, days, Math.max(260, Math.round(frame.clientWidth)));
+  };
+
+  options.forEach(({ option }) => {
+    const button = html('button', '', option.name, tabs);
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      selectedOption.set(chart.title, option.name);
+      draw();
+    });
+  });
+  return draw;
 }
 
 function addChart(grid, chart, allDays) {
+  if (chart.kind === 'switch') return addSwitchChart(grid, chart, allDays);
   const days = chart.series ? fromFirstReading(allDays, chart) : allDays;
   const data = chart.kind === 'histogram' ? histogramData(days, chart.key, chart.bucket) : null;
-  if (chart.kind === 'histogram' ? !data : !hasData(days, chart)) return null;
+  const profile = chart.kind === 'profile' ? profileRows(chart, days) : null;
+  if (profile ? profile.length === 0 : chart.kind === 'histogram' ? !data : !hasData(days, chart)) return null;
 
   const figure = html('figure', `hd-chart${chart.wide ? ' hd-chart--wide' : ''}`, undefined, grid);
   const caption = html('figcaption', '', undefined, figure);
   html('span', 'hd-chart__title', chart.title, caption);
   const sub = data
     ? `Mean ${data.mean.toFixed(1)} · Median ${data.median} · Mode ${data.mode} ${chart.unit}`
-    : `${chart.sub}${inRangeNote(chart, days)}`;
+    : chart.sub;
   html('span', 'hd-chart__sub', sub, caption);
-  legend(figure, chart);
+  if (profile) {
+    const list = html('ul', 'hd-legend', undefined, figure);
+    const average = html('li', '', undefined, list);
+    html('span', 'hd-swatch hd-swatch--dot', undefined, average);
+    average.append('Average');
+    const ideal = html('li', '', undefined, list);
+    html('span', 'hd-swatch hd-swatch--ideal', undefined, ideal);
+    ideal.append('Ideal range');
+  } else {
+    legend(figure, chart);
+  }
   const frame = html('div', 'hd-frame', undefined, figure);
   return () => {
     const width = Math.max(260, Math.round(frame.clientWidth));
-    if (data) renderHistogram(frame, chart, data, width);
+    if (profile) renderProfile(frame, chart, profile, width);
+    else if (data) renderHistogram(frame, chart, data, width);
     else if (chart.kind === 'stack') renderStack(frame, chart, days, width);
     else renderLine(frame, chart, days, width);
   };
