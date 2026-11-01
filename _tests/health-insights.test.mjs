@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GOALS, chooseFocus, compareWeeks, completeDays, findLevers, onTarget, targetGrid, watchPeriod, clock, noonMinutes } from "../assets/js/health-insights.js";
+import { GOALS, activityTotals, addRegularity, peakHeartRate, regularityBetween, weeklySummaries, compareWeeks, completeDays, findLevers, onTarget, targetGrid, watchPeriod, clock, noonMinutes } from "../assets/js/health-insights.js";
 const date = (i) => new Date(Date.UTC(2026, 8, 1) + i * 864e5).toISOString().slice(0, 10);
 const goal = (k) => GOALS.find((g) => g.key === k);
 const series = (n, f) => Array.from({ length: n }, (_, i) => ({ date: date(i), ...f(i) }));
@@ -34,19 +34,6 @@ test("trend reads toward the target, including lower-is-better", () => {
   assert.equal(flat.trend, "same");
   const fresh = compareWeeks(series(5, () => ({ steps: 5000 }))).find((r) => r.goal.key === "steps");
   assert.equal(fresh.trend, "new");
-});
-test("focus picks the weakest actionable goal, not vitals", () => {
-  const f = chooseFocus(compareWeeks(series(14, () => ({ steps: 3000, asleep: 8, exercise_min: 40, spo2: 90 }))));
-  assert.equal(f.goal.key, "steps"); assert.equal(f.allOnTrack, false); assert.equal(f.nextTarget, 2);
-});
-test("focus ignores goals with too few days and reports when all is well", () => {
-  const few = chooseFocus(compareWeeks(series(14, (i) => ({ steps: 8000, exercise_min: i === 13 ? 0 : undefined }))));
-  assert.equal(few.goal.key, "steps"); assert.equal(few.allOnTrack, true);
-  assert.equal(chooseFocus(compareWeeks(series(14, () => ({ spo2: 90 })))), null);
-});
-test("next target never exceeds 7", () => {
-  const f = chooseFocus(compareWeeks(series(14, (i) => ({ steps: i % 7 === 0 ? 3000 : 8000 }))));
-  assert.ok(f.nextTarget <= 7);
 });
 test("levers find a real difference and report the right direction", () => {
   const d = series(40, (i) => ({ bedtime: i % 2 ? 23 * 60 : 120, asleep: (i % 2 ? 8 : 6) + (i % 5) * 0.05 }));
@@ -92,4 +79,43 @@ test("grid separates hit, miss and missing, and hides empty goals", () => {
 test("clock helpers round-trip across midnight", () => {
   assert.equal(clock(noonMinutes(60)), "01:00"); assert.equal(clock(noonMinutes(23 * 60)), "23:00");
   assert.ok(noonMinutes(60) > noonMinutes(23 * 60));
+});
+test("peak heart rate ignores a single bad reading", () => {
+  const h_workout = { 140: 500, 170: 500, 220: 1 };
+  assert.equal(peakHeartRate([{ h_workout }]), 170);
+  assert.equal(peakHeartRate([{}]), null);
+});
+test("weeks are Monday based and only full weeks count", () => {
+  const start = Date.UTC(2026, 8, 7);
+  const d = Array.from({ length: 10 }, (_, i) => ({ date: new Date(start + i * 864e5).toISOString().slice(0, 10), strength_count: i === 0 ? 1 : 0, workout_count: 1 }));
+  const w = weeklySummaries(d);
+  assert.equal(w.length, 1); assert.equal(w[0].date, "2026-09-07");
+  assert.equal(w[0].strength, 1); assert.equal(w[0].workouts, 7);
+});
+test("zone minutes use the share of peak heart rate", () => {
+  const start = Date.UTC(2026, 8, 7);
+  const d = Array.from({ length: 7 }, (_, i) => ({ date: new Date(start + i * 864e5).toISOString().slice(0, 10), h_workout: { 200: 10 }, h_zone: i === 0 ? { 100: 10, 125: 20, 145: 30, 165: 40, 190: 50, 80: 99 } : {} }));
+  const [w] = weeklySummaries(d);
+  assert.deepEqual([w.z1, w.z2, w.z3, w.z4, w.z5], [10, 20, 30, 40, 50]);
+});
+test("activities add up and sort by minutes", () => {
+  const a = activityTotals([{ h_activity: { running: 30, strength: 10 } }, { h_activity: { strength: 50 } }, {}]);
+  assert.deepEqual(a.map((x) => x.name), ["strength", "running"]); assert.equal(a[0].minutes, 60);
+});
+test("regularity is 100 for identical days and falls as times move apart", () => {
+  const night = { bed: 660, wake: 1140 };
+  assert.equal(regularityBetween(night, night), 100);
+  assert.ok(Math.abs(regularityBetween(night, { bed: 720, wake: 1200 }) - (100 - 200 * (120 / 1440))) < 1e-9);
+  const never = regularityBetween({ bed: 0, wake: 480 }, { bed: 480, wake: 960 });
+  assert.ok(never < 0 + 200 * (480 / 1440) && never > -100);
+  assert.equal(regularityBetween({ bed: 700, wake: 600 }, night), null);
+});
+test("rolling regularity needs enough nights and handles midnight", () => {
+  const d = series(12, () => ({ bedtime: 23 * 60, wake_time: 7 * 60 }));
+  addRegularity(d);
+  assert.equal(d[3].regularity, undefined);
+  assert.equal(d[4].regularity, 100);
+  const gap = series(3, (i) => (i === 1 ? {} : { bedtime: 60, wake_time: 480 }));
+  addRegularity(gap);
+  assert.equal(gap[2].regularity, undefined);
 });

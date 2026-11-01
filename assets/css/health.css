@@ -12,6 +12,11 @@
   --hd-s2: #eb6834;
   --hd-s3: #1baf7a;
   --hd-s4: #eda100;
+  --hd-z1: #6da7ec;
+  --hd-z2: #3987e5;
+  --hd-z3: #256abf;
+  --hd-z4: #184f95;
+  --hd-z5: #0d366b;
   --hd-good: #0ca30c;
   --hd-warning: #fab219;
   --hd-critical: #d03b3b;
@@ -49,6 +54,11 @@ html.dark-mode .hd {
   --hd-s2: #d95926;
   --hd-s3: #199e70;
   --hd-s4: #c98500;
+  --hd-z1: #184f95;
+  --hd-z2: #256abf;
+  --hd-z3: #3987e5;
+  --hd-z4: #6da7ec;
+  --hd-z5: #9ec5f4;
 }
 
 .hd-status {
@@ -58,31 +68,6 @@ html.dark-mode .hd {
 
 .hd-overview {
   margin-top: 36px;
-}
-
-.hd-focus {
-  border: 1px solid var(--hd-ink-2);
-  border-radius: 4px;
-  padding: 16px;
-}
-
-.hd-focus__eyebrow {
-  color: var(--hd-ink-2);
-  display: block;
-  font-size: 0.8em;
-}
-
-.hd-focus__title {
-  display: block;
-  font-size: 1.25em;
-  line-height: 1.3;
-  margin: 4px 0;
-}
-
-.hd-focus__text {
-  color: var(--hd-ink-2);
-  font-size: 0.9em;
-  margin: 0;
 }
 
 .hd-block-title {
@@ -358,6 +343,80 @@ html.dark-mode .hd {
 .hd-plot .hd-end {
   fill: var(--hd-ink);
   font-weight: 700;
+}
+
+.hd-info-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--hd-ink-2);
+  border-radius: 50%;
+  color: var(--hd-ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  font: italic 700 10px/1 Georgia, serif;
+  height: 15px;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 0;
+  position: relative;
+  vertical-align: 1px;
+  width: 15px;
+}
+
+/* Keeps the small icon easy to tap. */
+.hd-info-button::after {
+  content: "";
+  inset: -8px;
+  position: absolute;
+}
+
+.hd-info-button:hover,
+.hd-info-button[aria-expanded="true"] {
+  border-color: var(--hd-ink);
+  color: var(--hd-ink);
+}
+
+.hd-info-button:focus-visible {
+  outline: 2px solid var(--hd-ink);
+  outline-offset: 2px;
+}
+
+.hd-info {
+  background: var(--hd-surface);
+  border: 1px solid var(--hd-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 12px;
+  position: fixed;
+  width: 320px;
+  z-index: 20;
+}
+
+.hd-info[hidden] {
+  display: none;
+}
+
+.hd-info__title {
+  display: block;
+  font-size: 14px;
+}
+
+.hd-info__label {
+  color: var(--hd-ink-2);
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+.hd-info__text {
+  color: var(--hd-ink);
+  margin: 1px 0 0;
 }
 
 .hd-tip {

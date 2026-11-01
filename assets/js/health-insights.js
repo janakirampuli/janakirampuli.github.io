@@ -1,5 +1,4 @@
 const WEEK = 7;
-const MIN_WEEK_DAYS = 3;
 const MIN_GROUP = 10;
 const MIN_EFFECT = 0.5;
 const MAX_LEVERS = 6;
@@ -9,7 +8,7 @@ const hours = (v) => `${v.toFixed(1)} h`;
 const bpm = (v) => `${Math.round(v)} bpm`;
 
 export const GOALS = [
-  { key: 'asleep', label: 'Time asleep', low: 7, high: 9, format: hours, target: '7-9 h', action: 'Sleep 7+ hours' },
+  { key: 'asleep', label: 'Time asleep', low: 7, high: 9, format: hours, target: '7-9 h' },
   { key: 'deep', label: 'Deep sleep', low: 1, high: 2, format: hours, target: '1-2 h' },
   { key: 'rem', label: 'REM sleep', low: 1.5, high: 2, format: hours, target: '1.5-2 h' },
   { key: 'awake', label: 'Awake at night', low: 0, high: 0.5, format: hours, target: 'Under 30 min' },
@@ -18,8 +17,8 @@ export const GOALS = [
   { key: 'resting_hr', label: 'Resting heart rate', low: 60, high: 100, format: bpm, target: '60-100 bpm' },
   { key: 'breath', label: 'Breathing rate', low: 12, high: 20, format: (v) => `${v.toFixed(1)} /min`, target: '12-20 /min' },
   { key: 'spo2', label: 'Blood oxygen', low: 95, high: 100, format: (v) => `${v.toFixed(1)}%`, target: '95-100%' },
-  { key: 'steps', label: 'Steps', low: 7000, high: Infinity, format: (v) => Math.round(v).toLocaleString(), target: '7,000+', action: 'Walk 7,000+ steps' },
-  { key: 'exercise_min', label: 'Exercise', low: 21, high: Infinity, format: (v) => `${Math.round(v)} min`, target: '21+ min', action: 'Exercise for 21+ minutes' },
+  { key: 'steps', label: 'Steps', low: 7000, high: Infinity, format: (v) => Math.round(v).toLocaleString(), target: '7,000+' },
+  { key: 'exercise_min', label: 'Exercise', low: 21, high: Infinity, format: (v) => `${Math.round(v)} min`, target: '21+ min' },
 ];
 
 const finite = Number.isFinite;
@@ -64,18 +63,6 @@ export function compareWeeks(days) {
     const previous = summarize(goal, previousDays);
     return { goal, last, previous, trend: trend(goal, last, previous) };
   }).filter((row) => row.last.count > 0);
-}
-
-export function chooseFocus(weeks) {
-  const options = weeks.filter((row) => row.goal.action && row.last.count >= MIN_WEEK_DAYS);
-  if (options.length === 0) return null;
-  const rate = (row) => row.last.hits / row.last.count;
-  const focus = options.reduce((best, row) => (rate(row) < rate(best) ? row : best));
-  return {
-    ...focus,
-    allOnTrack: rate(focus) >= 5 / 7,
-    nextTarget: Math.min(WEEK, focus.last.hits + 2),
-  };
 }
 
 export const noonMinutes = (clockMinutes) => (clockMinutes + 720) % 1440;
@@ -191,4 +178,114 @@ export function targetGrid(days) {
     const measured = cells.filter((cell) => cell.value !== null);
     return { goal, cells, hits: measured.filter((cell) => cell.hit).length, count: measured.length };
   }).filter((row) => row.count > 0);
+}
+
+const ZONE_BOUNDS = [0.5, 0.6, 0.7, 0.8, 0.9];
+const PEAK_PERCENTILE = 0.995;
+const REGULARITY_WINDOW = 7;
+const REGULARITY_MIN_PAIRS = 4;
+const MINUTES_IN_DAY = 1440;
+
+// Uses a high percentile, because a single bad reading can be far above the true peak.
+export function peakHeartRate(days) {
+  const counts = new Map();
+  days.forEach((day) => {
+    Object.entries(day.h_workout ?? {}).forEach(([bucket, count]) => {
+      counts.set(Number(bucket), (counts.get(Number(bucket)) ?? 0) + count);
+    });
+  });
+  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+  if (total === 0) return null;
+  let running = 0;
+  for (const bucket of [...counts.keys()].sort((a, b) => a - b)) {
+    running += counts.get(bucket);
+    if (running >= total * PEAK_PERCENTILE) return bucket;
+  }
+  return null;
+}
+
+function zoneIndex(heartRate, peak) {
+  const share = heartRate / peak;
+  for (let index = ZONE_BOUNDS.length - 1; index >= 0; index -= 1) {
+    if (share >= ZONE_BOUNDS[index]) return index;
+  }
+  return -1;
+}
+
+const mondayOf = (date) => {
+  const time = Date.parse(`${date}T00:00:00Z`);
+  const weekday = (new Date(time).getUTCDay() + 6) % 7;
+  return new Date(time - weekday * DAY_MS).toISOString().slice(0, 10);
+};
+
+// Only full weeks are kept, so a partial week never reads as falling short of a weekly goal.
+export function weeklySummaries(days) {
+  const peak = peakHeartRate(days);
+  const weeks = new Map();
+  days.forEach((day) => {
+    const key = mondayOf(day.date);
+    if (!weeks.has(key)) {
+      weeks.set(key, { date: key, days: 0, strength: 0, workouts: 0, zones: [0, 0, 0, 0, 0] });
+    }
+    const week = weeks.get(key);
+    week.days += 1;
+    if (finite(day.strength_count)) week.strength += day.strength_count;
+    if (finite(day.workout_count)) week.workouts += day.workout_count;
+    if (peak) {
+      Object.entries(day.h_zone ?? {}).forEach(([bucket, minutes]) => {
+        const zone = zoneIndex(Number(bucket) + 2.5, peak);
+        if (zone >= 0) week.zones[zone] += minutes;
+      });
+    }
+  });
+  return [...weeks.values()]
+    .filter((week) => week.days === WEEK)
+    .map((week) => ({
+      date: week.date,
+      strength: week.strength,
+      workouts: week.workouts,
+      z1: week.zones[0],
+      z2: week.zones[1],
+      z3: week.zones[2],
+      z4: week.zones[3],
+      z5: week.zones[4],
+    }));
+}
+
+export function activityTotals(days) {
+  const totals = new Map();
+  days.forEach((day) => {
+    Object.entries(day.h_activity ?? {}).forEach(([name, minutes]) => {
+      totals.set(name, (totals.get(name) ?? 0) + minutes);
+    });
+  });
+  return [...totals.entries()]
+    .map(([name, minutes]) => ({ name, minutes }))
+    .sort((a, b) => b.minutes - a.minutes);
+}
+
+// The share of minutes spent in the same state, asleep or awake, 24 hours apart, scaled so 100 means identical.
+export function regularityBetween(a, b) {
+  const sleepA = a.wake - a.bed;
+  const sleepB = b.wake - b.bed;
+  if (sleepA <= 0 || sleepB <= 0) return null;
+  const overlap = Math.max(0, Math.min(a.wake, b.wake) - Math.max(a.bed, b.bed));
+  const different = sleepA + sleepB - 2 * overlap;
+  return -100 + 200 * ((MINUTES_IN_DAY - different) / MINUTES_IN_DAY);
+}
+
+export function addRegularity(days) {
+  const window = (day) => (finite(day.bedtime) && finite(day.wake_time)
+    ? { bed: noonMinutes(day.bedtime), wake: noonMinutes(day.wake_time) }
+    : null);
+  const pairs = days.map((day, index) => {
+    if (index === 0) return null;
+    const today = window(day);
+    const yesterday = window(days[index - 1]);
+    return today && yesterday ? regularityBetween(yesterday, today) : null;
+  });
+  days.forEach((day, index) => {
+    const recent = pairs.slice(Math.max(0, index - REGULARITY_WINDOW + 1), index + 1).filter(finite);
+    if (recent.length >= REGULARITY_MIN_PAIRS) day.regularity = mean(recent);
+  });
 }

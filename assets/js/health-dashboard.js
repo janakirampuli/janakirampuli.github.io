@@ -1,4 +1,8 @@
-import { chooseFocus, compareWeeks, completeDays, findLevers, targetGrid, watchPeriod } from './health-insights.js';
+import { infoFor } from './health-info.js';
+import {
+  activityTotals, addRegularity, compareWeeks, completeDays, findLevers, peakHeartRate,
+  targetGrid, watchPeriod, weeklySummaries,
+} from './health-insights.js';
 
 const root = document.getElementById('health-dashboard');
 const status = document.getElementById('hd-status');
@@ -37,6 +41,83 @@ function html(name, className, text, parent) {
   if (text !== undefined) node.textContent = text;
   if (parent) parent.appendChild(node);
   return node;
+}
+
+let popover = null;
+let popoverOwner = null;
+let pinned = false;
+let hideTimer;
+
+function closeInfo() {
+  clearTimeout(hideTimer);
+  if (popoverOwner) popoverOwner.setAttribute('aria-expanded', 'false');
+  if (popover) popover.hidden = true;
+  popoverOwner = null;
+  pinned = false;
+}
+
+function openInfo(button, name, info) {
+  clearTimeout(hideTimer);
+  if (popoverOwner && popoverOwner !== button) popoverOwner.setAttribute('aria-expanded', 'false');
+  if (!popover) {
+    popover = html('div', 'hd hd-info', undefined, document.body);
+    popover.setAttribute('role', 'tooltip');
+    popover.id = 'hd-info';
+    popover.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+    popover.addEventListener('mouseleave', () => { if (!pinned) closeInfo(); });
+    document.addEventListener('click', (event) => {
+      if (popover.contains(event.target) || event.target.closest?.('.hd-info-button')) return;
+      closeInfo();
+    });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeInfo(); });
+    window.addEventListener('scroll', closeInfo, { passive: true });
+    window.addEventListener('resize', closeInfo);
+  }
+  popover.replaceChildren();
+  html('strong', 'hd-info__title', name, popover);
+  [['What it is', info.what], ['What good looks like', info.ideal], ['What helps', info.help]].forEach(([label, text]) => {
+    if (!text) return;
+    html('span', 'hd-info__label', label, popover);
+    html('p', 'hd-info__text', text, popover);
+  });
+  popover.hidden = false;
+  popoverOwner = button;
+  button.setAttribute('aria-expanded', 'true');
+
+  const margin = 12;
+  const rect = button.getBoundingClientRect();
+  const box = popover.getBoundingClientRect();
+  const left = Math.max(margin, Math.min(rect.left, window.innerWidth - box.width - margin));
+  const below = rect.bottom + 6;
+  const top = below + box.height + margin > window.innerHeight ? Math.max(margin, rect.top - box.height - 6) : below;
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+}
+
+// A function name lets a chart that switches views explain whichever view is showing.
+function infoButton(parent, name) {
+  const resolve = () => (typeof name === 'function' ? name() : name);
+  if (!infoFor(resolve())) return null;
+  const button = html('button', 'hd-info-button', 'i', parent);
+  button.type = 'button';
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-describedby', 'hd-info');
+  const label = () => button.setAttribute('aria-label', `About ${resolve()}`);
+  label();
+  button.addEventListener('mouseenter', () => { if (!pinned) openInfo(button, resolve(), infoFor(resolve())); });
+  button.addEventListener('mouseleave', () => {
+    if (!pinned) hideTimer = setTimeout(closeInfo, 150);
+  });
+  button.addEventListener('click', () => {
+    if (pinned && popoverOwner === button) {
+      closeInfo();
+      return;
+    }
+    openInfo(button, resolve(), infoFor(resolve()));
+    pinned = true;
+    label();
+  });
+  return button;
 }
 
 const toTime = (date) => Date.parse(`${date}T00:00:00Z`);
@@ -81,8 +162,9 @@ function prepare(days) {
   [
     'asleep', 'deep', 'rem', 'core', 'awake', 'in_bed', 'bed_axis', 'wake_axis', 'sleep_hr', 'sleep_hr_low', 'sleep_hrv', 'breath',
     'hr_rest', 'hr_awake', 'hr_workout', 'resting_hr', 'vo2', 'steps', 'active_kcal', 'total_kcal',
-    'exercise_min', 'spo2', 'breathing_dist', 'wrist_temp',
+    'exercise_min', 'spo2', 'breathing_dist', 'wrist_temp', 'hr_recovery',
   ].forEach((key) => addMovingAverage(days, key));
+  addRegularity(days);
 }
 
 function niceTicks(min, max, steps = [1, 2, 5, 10], count = 4) {
@@ -226,7 +308,7 @@ function tipRow(tip, color, label, value) {
 
 function fillDayTip(chart) {
   return (tip, day) => {
-    html('div', 'hd-tip__date', longDate(day.date), tip);
+    html('div', 'hd-tip__date', chart.weekly ? `Week of ${shortDate(day.date)}` : longDate(day.date), tip);
     let rows = 0;
     chart.series.forEach((series) => {
       const value = day[series.key];
@@ -354,7 +436,10 @@ function columnFit(count, width) {
 function renderStack(frame, chart, days, width) {
   const totals = days.map((day) => chart.series.reduce((sum, s) => sum + (day[s.key] ?? 0), 0));
   const { thickness, inset } = columnFit(days.length, width);
-  const plot = createPlot(chart, days, width, niceTicks(0, Math.max(...totals)), (day) => shortDate(day.date), inset);
+  const top = Math.max(...totals, ...(chart.guides ?? []).map((g) => g.value));
+  // Counts such as sessions need whole-number ticks.
+  const ticks = niceTicks(0, top).filter((tick) => !chart.wholeTicks || Number.isInteger(tick));
+  const plot = createPlot(chart, days, width, ticks, (day) => shortDate(day.date), inset);
   const gap = thickness >= 6 ? 2 : 0;
 
   days.forEach((day, i) => {
@@ -362,11 +447,14 @@ function renderStack(frame, chart, days, width) {
     const parts = chart.series.filter((s) => (day[s.key] ?? 0) > 0);
     parts.forEach((series, partIndex) => {
       const size = plot.y(0) - plot.y(day[series.key]);
-      const top = bottom - Math.max(0.5, size - gap);
-      column(plot, plot.node, plot.x(i), thickness, top, bottom, series.color, partIndex === parts.length - 1);
-      bottom = top - gap;
+      const segmentTop = bottom - Math.max(0.5, size - gap);
+      column(plot, plot.node, plot.x(i), thickness, segmentTop, bottom, series.color, partIndex === parts.length - 1);
+      bottom = segmentTop - gap;
     });
   });
+  // Drawn after the columns, so a goal line stays visible across them.
+  drawRange(plot, chart, ticks, width);
+  labelRange(plot, chart, ticks);
 
   frame.appendChild(plot.node);
   addHover(frame, plot, days, chart, width, fillDayTip(chart));
@@ -496,6 +584,15 @@ const HRV_ZONES = [
   { below: Infinity, label: 'Excellent (>100)', color: good },
 ];
 
+const ACTIVITY_NAMES = {
+  strength: 'Strength', functionalStrength: 'Functional strength', core: 'Core', hiit: 'HIIT', running: 'Running',
+  walking: 'Walking', hiking: 'Hiking', cycling: 'Cycling', swimming: 'Swimming', rowing: 'Rowing',
+  elliptical: 'Elliptical', stairs: 'Stairs', crossTraining: 'Cross training', yoga: 'Yoga', pilates: 'Pilates',
+  cardio: 'Cardio', cricket: 'Cricket', badminton: 'Badminton', tennis: 'Tennis', football: 'Football',
+  basketball: 'Basketball', other: 'Other',
+};
+const activityLabel = (name) => ACTIVITY_NAMES[name] ?? 'Other';
+
 const stageTrend = (name, key, sub, range) => ({
   name,
   ...daily(key, name, sub, hours, { zeroBase: true, range, formatAxis: (v) => `${v}h` }),
@@ -551,6 +648,9 @@ const SECTIONS = [
           stageTrend('Awake', 'awake', 'Hours per night', { low: 0, high: 0.5, label: 'Ideal: under 30 min' }),
         ],
       },
+      trends('Sleep regularity', 'Score from your last 7 nights of main sleep. 100 means the same sleep times every day.', (v) => `${Math.round(v)}`, [
+        { key: 'regularity', label: 'Regularity', color: s1 },
+      ]),
       trends('Heart rate during sleep', 'Beats per minute, 7-day average', bpm, [
         { key: 'sleep_hr_ma', label: 'Average', color: s2 },
         { key: 'sleep_hr_low_ma', label: 'Lowest', color: s1 },
@@ -586,6 +686,7 @@ const SECTIONS = [
       ], { wide: true }),
       distribution('Awake heart rate distribution', 'h_awake', 2, 'bpm', s1),
       distribution('Workout heart rate distribution', 'h_workout', 2, 'bpm', s2),
+      daily('hr_recovery', 'Heart rate recovery', 'Drop in beats per minute one minute after exercise, recorded after some workouts.', bpm),
       daily('resting_hr', 'Resting heart rate', 'Beats per minute. Below 60 is not always a concern, especially if you train.', bpm, {
         range: { low: 60, high: 100, label: 'Normal: 60-100 bpm' },
       }),
@@ -596,9 +697,43 @@ const SECTIONS = [
     title: '3. Activity',
     sub: 'Steps, calories and exercise',
     charts: [
-      daily('steps', 'Daily steps', 'Steps. Earlier months may be from iPhone only.', round, {
+      daily('steps', 'Daily steps', 'Steps', round, {
         wide: true, zeroBase: true, formatAxis: compact, range: { low: 7000, label: 'Goal: 7,000+ steps' },
       }),
+      {
+        kind: 'stack',
+        weekly: true,
+        wide: true,
+        showsPeak: true,
+        title: 'Weekly time in heart rate zones',
+        sub: 'Minutes of active heart rate per week.',
+        format: (v) => `${Math.round(v)} min`,
+        formatAxis: compact,
+        series: [
+          { key: 'z1', label: 'Zone 1 (50-60%)', color: 'var(--hd-z1)' },
+          { key: 'z2', label: 'Zone 2 (60-70%)', color: 'var(--hd-z2)' },
+          { key: 'z3', label: 'Zone 3 (70-80%)', color: 'var(--hd-z3)' },
+          { key: 'z4', label: 'Zone 4 (80-90%)', color: 'var(--hd-z4)' },
+          { key: 'z5', label: 'Zone 5 (90%+)', color: 'var(--hd-z5)' },
+        ],
+      },
+      {
+        kind: 'stack',
+        weekly: true,
+        title: 'Strength sessions per week',
+        sub: 'Sessions logged as strength or core workouts.',
+        format: (v) => `${Math.round(v)}`,
+        formatAxis: compact,
+        wholeTicks: true,
+        guides: [{ value: 2, label: 'Goal: 2 sessions' }],
+        series: [{ key: 'strength', label: 'Strength', color: s1 }],
+      },
+      {
+        kind: 'ranked',
+        wide: true,
+        title: 'Workouts by type',
+        sub: 'Total minutes of logged workouts.',
+      },
       trends('Calories', 'kcal, 7-day average', (v) => `${round(v)} kcal`, [
         { key: 'total_kcal_ma', label: 'Total', color: s2 },
         { key: 'active_kcal_ma', label: 'Active', color: s1 },
@@ -636,17 +771,17 @@ const TILES = [
 
 const hasData = (days, chart) => chart.series.some((s) => {
   const count = days.filter((d) => Number.isFinite(d[s.key])).length;
-  return chart.kind === 'stack' ? count > 0 : !s.thin && count >= 2;
+  // Weekly totals are zero when nothing was recorded, so a stack needs a value above zero.
+  return chart.kind === 'stack' ? days.some((d) => d[s.key] > 0) : !s.thin && count >= 2;
 });
 
-function renderTiles(parent, allDays) {
-  const days = watchPeriod(allDays);
+function renderTiles(parent, days) {
   const grid = html('div', 'hd-tiles', undefined, parent);
   TILES.forEach((tile) => {
     const values = days.map((d) => d[tile.key]).filter(Number.isFinite);
     if (values.length === 0) return;
     const card = html('div', 'hd-tile', undefined, grid);
-    html('span', 'hd-tile__label', tile.label, card);
+    infoButton(html('span', 'hd-tile__label', tile.label, card), tile.label);
     html('span', 'hd-tile__value', tile.format(values.reduce((a, b) => a + b, 0) / values.length), card);
     if (tile.reference) html('span', 'hd-tile__reference', tile.reference, card);
   });
@@ -746,7 +881,8 @@ function addSwitchChart(grid, chart, allDays) {
 
   const figure = html('figure', 'hd-chart hd-chart--wide', undefined, grid);
   const caption = html('figcaption', '', undefined, figure);
-  html('span', 'hd-chart__title', chart.title, caption);
+  const switchTitle = html('span', 'hd-chart__title', chart.title, caption);
+  infoButton(switchTitle, () => selectedOption.get(chart.title) ?? options[0].option.name);
   const sub = html('span', 'hd-chart__sub', undefined, caption);
   const tabs = html('div', 'hd-tabs', undefined, figure);
   tabs.setAttribute('role', 'group');
@@ -771,6 +907,7 @@ function addSwitchChart(grid, chart, allDays) {
     const button = html('button', '', option.name, tabs);
     button.type = 'button';
     button.addEventListener('click', () => {
+      closeInfo();
       selectedOption.set(chart.title, option.name);
       draw();
     });
@@ -778,20 +915,59 @@ function addSwitchChart(grid, chart, allDays) {
   return draw;
 }
 
+function renderRanked(frame, chart, rows, width) {
+  const left = width < 520 ? 104 : 150;
+  const right = 64;
+  const rowHeight = 26;
+  const height = rows.length * rowHeight;
+  const max = Math.max(...rows.map((row) => row.minutes));
+  const node = svg('svg', {
+    class: 'hd-plot',
+    viewBox: `0 0 ${width} ${height}`,
+    role: 'img',
+    'aria-label': rows.map((row) => `${activityLabel(row.name)}: ${Math.round(row.minutes)} minutes`).join('. '),
+  });
+  rows.forEach((row, index) => {
+    const middle = index * rowHeight + rowHeight / 2;
+    const label = svg('text', { x: 0, y: middle + 4 }, node);
+    label.textContent = activityLabel(row.name);
+    svg('rect', {
+      x: left, y: middle - 8, width: Math.max(2, (row.minutes / max) * (width - left - right)), height: 16, rx: 3, fill: 'var(--hd-s1)',
+    }, node);
+    const value = svg('text', { class: 'hd-end', x: width, y: middle + 4, 'text-anchor': 'end' }, node);
+    value.textContent = `${Math.round(row.minutes).toLocaleString()} min`;
+  });
+  frame.appendChild(node);
+}
+
 function addChart(grid, chart, allDays) {
   if (chart.kind === 'switch') return addSwitchChart(grid, chart, allDays);
-  const days = chart.series ? fromFirstReading(allDays, chart) : allDays;
+  const activities = chart.kind === 'ranked' ? activityTotals(allDays) : null;
+  if (activities) {
+    if (activities.length === 0) return null;
+    const figure = html('figure', `hd-chart${chart.wide ? ' hd-chart--wide' : ''}`, undefined, grid);
+    const caption = html('figcaption', '', undefined, figure);
+    infoButton(html('span', 'hd-chart__title', chart.title, caption), chart.title);
+    html('span', 'hd-chart__sub', chart.sub, caption);
+    const frame = html('div', 'hd-frame', undefined, figure);
+    return () => renderRanked(frame, chart, activities, Math.max(260, Math.round(frame.clientWidth)));
+  }
+  const source = chart.weekly
+    ? weeklySummaries(completeDays(allDays, new Date().toLocaleDateString('en-CA')))
+    : allDays;
+  const days = chart.series ? fromFirstReading(source, chart) : source;
   const data = chart.kind === 'histogram' ? histogramData(days, chart.key, chart.bucket) : null;
   const profile = chart.kind === 'profile' ? profileRows(chart, days) : null;
   if (profile ? profile.length === 0 : chart.kind === 'histogram' ? !data : !hasData(days, chart)) return null;
 
   const figure = html('figure', `hd-chart${chart.wide ? ' hd-chart--wide' : ''}`, undefined, grid);
   const caption = html('figcaption', '', undefined, figure);
-  html('span', 'hd-chart__title', chart.title, caption);
+  infoButton(html('span', 'hd-chart__title', chart.title, caption), chart.title);
   const sub = data
     ? `Mean ${data.mean.toFixed(1)} · Median ${data.median} · Mode ${data.mode} ${chart.unit}`
     : chart.sub;
-  html('span', 'hd-chart__sub', sub, caption);
+  const peak = chart.showsPeak ? peakHeartRate(allDays) : null;
+  html('span', 'hd-chart__sub', peak ? `${sub} Zones use your highest recorded heart rates, about ${peak} bpm, as your maximum.` : sub, caption);
   if (profile) {
     const list = html('ul', 'hd-legend', undefined, figure);
     const average = html('li', '', undefined, list);
@@ -821,27 +997,12 @@ const TREND = {
   new: { icon: '·', text: 'New this week' },
 };
 
-const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
-
-function renderFocus(parent, focus) {
-  const card = html('div', 'hd-focus', undefined, parent);
-  html('span', 'hd-focus__eyebrow', "This week's focus", card);
-  if (focus.allOnTrack) {
-    html('strong', 'hd-focus__title', 'Keep the routine going', card);
-    html('p', 'hd-focus__text', `Sleep, steps and exercise each hit target on most recent days. The lowest was ${focus.goal.label.toLowerCase()}, at ${focus.last.hits} of ${plural(focus.last.count, 'day')}.`, card);
-    return;
-  }
-  html('strong', 'hd-focus__title', `${focus.goal.action} on ${focus.nextTarget} of the next 7 days`, card);
-  const before = focus.previous.count ? `, compared with ${focus.previous.hits} of ${focus.previous.count} the week before` : '';
-  html('p', 'hd-focus__text', `Hit on ${focus.last.hits} of the last ${plural(focus.last.count, 'day')}${before}. Target: ${focus.goal.target}.`, card);
-}
-
 function renderWeeks(parent, weeks) {
   html('h4', 'hd-block-title', 'Last 7 days vs the 7 before', parent);
   const grid = html('div', 'hd-weeks', undefined, parent);
   weeks.forEach(({ goal, last, previous, trend }) => {
     const card = html('div', 'hd-week', undefined, grid);
-    html('span', 'hd-tile__label', goal.label, card);
+    infoButton(html('span', 'hd-tile__label', goal.label, card), goal.label);
     html('span', 'hd-week__value', goal.format(last.average), card);
     const line = html('span', `hd-week__trend hd-week__trend--${trend}`, undefined, card);
     html('span', '', TREND[trend].icon, line).setAttribute('aria-hidden', 'true');
@@ -852,7 +1013,7 @@ function renderWeeks(parent, weeks) {
 }
 
 function renderLevers(parent, levers, nights) {
-  html('h4', 'hd-block-title', 'What moves the needle', parent);
+  html('h4', 'hd-block-title', 'Habits linked to your results', parent);
   if (levers.length === 0) {
     html('p', 'hd-block-sub', 'No clear patterns yet. These appear when a habit and a result differ clearly across at least 10 days each way.', parent);
     return;
@@ -945,12 +1106,10 @@ function renderGrid(parent, rows, width) {
 
 function renderOverview(content, allDays) {
   const today = new Date().toLocaleDateString('en-CA');
-  const days = completeDays(watchPeriod(allDays), today);
+  const days = completeDays(allDays, today);
   if (days.length === 0) return;
   const section = html('div', 'hd-overview', undefined, content);
   const weeks = compareWeeks(days);
-  const focus = chooseFocus(weeks);
-  if (focus) renderFocus(section, focus);
   renderWeeks(section, weeks);
   renderLevers(section, findLevers(days), days.length);
   const rows = targetGrid(days);
@@ -958,6 +1117,7 @@ function renderOverview(content, allDays) {
 }
 
 function render(content, days) {
+  closeInfo();
   content.replaceChildren();
 
   SECTIONS.forEach((section) => {
@@ -990,7 +1150,8 @@ async function main() {
     return;
   }
 
-  const days = fillDays(file.days);
+  // Starts at the first watch reading, because earlier iPhone-only counts are unreliable.
+  const days = watchPeriod(fillDays(file.days));
   prepare(days);
 
   status.remove();
