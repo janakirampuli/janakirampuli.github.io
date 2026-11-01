@@ -1,0 +1,15 @@
+---
+layout: default
+title: Health
+permalink: /health/
+extra_css:
+  - /assets/css/health.css
+---
+
+<div class="hd" id="health-dashboard" data-src="https://health.janakirampuli.workers.dev/public/daily.json">
+  <p class="hd-note">Daily summaries from my Apple Watch.</p>
+  <p class="hd-status" id="hd-status" role="status">Loading...</p>
+  <noscript><p class="hd-status">This dashboard needs JavaScript.</p></noscript>
+</div>
+
+<script type="module" src="{{ '/assets/js/health-dashboard.js' | relative_url }}"></script>

@@ -41,6 +41,8 @@ nav:
   #   url: /projects/
   - title: Resume
     url: /resume/
+  - title: Health
+    url: /health/
 
 show_downloads: false
 
