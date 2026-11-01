@@ -1,3 +1,5 @@
+import { chooseFocus, compareWeeks, completeDays, findLevers, targetGrid, watchPeriod } from './health-insights.js';
+
 const root = document.getElementById('health-dashboard');
 const status = document.getElementById('hd-status');
 
@@ -77,7 +79,7 @@ function prepare(days) {
     if (Number.isFinite(day.wake_time)) day.wake_axis = (day.wake_time + 720) % 1440;
   });
   [
-    'asleep', 'in_bed', 'bed_axis', 'wake_axis', 'sleep_hr', 'sleep_hr_low', 'sleep_hrv', 'breath',
+    'asleep', 'deep', 'rem', 'core', 'awake', 'in_bed', 'bed_axis', 'wake_axis', 'sleep_hr', 'sleep_hr_low', 'sleep_hrv', 'breath',
     'hr_rest', 'hr_awake', 'hr_workout', 'resting_hr', 'vo2', 'steps', 'active_kcal', 'total_kcal',
     'exercise_min', 'spo2', 'breathing_dist', 'wrist_temp',
   ].forEach((key) => addMovingAverage(days, key));
@@ -101,7 +103,7 @@ function timeTicks(min, max) {
   return ticks;
 }
 
-function createPlot(chart, items, width, yTicks, xLabel) {
+function createPlot(chart, items, width, yTicks, xLabel, inset = 0) {
   const inner = width - MARGIN.left - MARGIN.right;
   const height = MARGIN.top + PLOT_HEIGHT + MARGIN.bottom;
   const node = svg('svg', {
@@ -113,7 +115,7 @@ function createPlot(chart, items, width, yTicks, xLabel) {
   });
   const yMin = yTicks[0];
   const yMax = yTicks[yTicks.length - 1];
-  const x = (i) => MARGIN.left + (items.length === 1 ? inner / 2 : (i / (items.length - 1)) * inner);
+  const x = (i) => MARGIN.left + inset + (items.length === 1 ? (inner - 2 * inset) / 2 : (i / (items.length - 1)) * (inner - 2 * inset));
   const y = (v) => MARGIN.top + PLOT_HEIGHT - ((v - yMin) / (yMax - yMin)) * PLOT_HEIGHT;
 
   yTicks.forEach((tick, index) => {
@@ -139,7 +141,7 @@ function createPlot(chart, items, width, yTicks, xLabel) {
     const label = svg('text', { x: x(i), y: height - 8, 'text-anchor': anchor }, node);
     label.textContent = xLabel(items[i]);
   }
-  return { node, x, y, height };
+  return { node, x, y, height, inset };
 }
 
 function linePath(days, key, x, y) {
@@ -196,7 +198,7 @@ function addHover(frame, plot, items, chart, width, fillTip, drawMarkers) {
   const indexAt = (event) => {
     const rect = plot.node.getBoundingClientRect();
     const px = ((event.clientX - rect.left) / rect.width) * width;
-    const ratio = (px - MARGIN.left) / (width - MARGIN.left - MARGIN.right);
+    const ratio = (px - MARGIN.left - plot.inset) / (width - MARGIN.left - MARGIN.right - 2 * plot.inset);
     return Math.max(0, Math.min(items.length - 1, Math.round(ratio * (items.length - 1))));
   };
 
@@ -236,15 +238,54 @@ function fillDayTip(chart) {
   };
 }
 
+function guideLabel(plot, y, text) {
+  const label = svg('text', { class: 'hd-guide', x: MARGIN.left + 6, y: y - 5 }, plot.node);
+  label.textContent = text;
+}
+
+function drawRange(plot, chart, ticks, width) {
+  if (chart.range) {
+    const top = plot.y(Math.min(chart.range.high ?? Infinity, ticks[ticks.length - 1]));
+    svg('rect', {
+      x: MARGIN.left,
+      y: top,
+      width: width - MARGIN.left - MARGIN.right,
+      height: plot.y(chart.range.low) - top,
+      fill: 'var(--hd-band)',
+    }, plot.node);
+  }
+  (chart.guides ?? []).forEach((guide) => {
+    svg('line', {
+      x1: MARGIN.left,
+      x2: width - MARGIN.right,
+      y1: plot.y(guide.value),
+      y2: plot.y(guide.value),
+      stroke: 'var(--hd-axis)',
+      'stroke-width': 1,
+    }, plot.node);
+  });
+}
+
+// Drawn after the lines, so the labels stay readable.
+function labelRange(plot, chart, ticks) {
+  if (chart.range) {
+    guideLabel(plot, plot.y(Math.min(chart.range.high ?? Infinity, ticks[ticks.length - 1])) + 16, chart.range.label);
+  }
+  (chart.guides ?? []).forEach((guide) => guideLabel(plot, plot.y(guide.value), guide.label));
+}
+
 function renderLine(frame, chart, days, width) {
   const values = days.flatMap((day) => chart.series.map((s) => day[s.key])).filter(Number.isFinite);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  // The reference range stays in view, so distance from it is visible.
+  const bounds = [chart.range?.low, chart.range?.high, ...(chart.guides ?? []).map((g) => g.value)].filter(Number.isFinite);
+  const min = Math.min(...values, ...bounds);
+  const max = Math.max(...values, ...bounds);
   const pad = (max - min) * 0.08 || 1;
   const ticks = chart.time
     ? timeTicks(min, max)
     : niceTicks(chart.zeroBase ? 0 : Math.max(0, min - pad), max + pad);
   const plot = createPlot(chart, days, width, ticks, (day) => shortDate(day.date));
+  drawRange(plot, chart, ticks, width);
 
   chart.series.forEach((series) => {
     svg('path', {
@@ -256,6 +297,8 @@ function renderLine(frame, chart, days, width) {
       'stroke-linecap': 'round',
     }, plot.node);
   });
+
+  labelRange(plot, chart, ticks);
 
   // Labels the line ends, unless they would collide, then the legend and tooltip carry them.
   const ends = chart.series
@@ -274,7 +317,7 @@ function renderLine(frame, chart, days, width) {
     }, plot.node);
     if (apart) {
       const label = svg('text', { class: 'hd-end', x: plot.x(index) + 8, y: plot.y(value) + 4 }, plot.node);
-      label.textContent = chart.formatAxis(Math.round(value * 10) / 10);
+      label.textContent = chart.formatAxis(value >= 100 ? Math.round(value) : Math.round(value * 10) / 10);
     }
   });
 
@@ -301,11 +344,17 @@ function column(plot, node, centre, thickness, top, bottom, color, rounded) {
   }, node);
 }
 
+// Insets the first and last columns so they cannot cover the axis labels.
+function columnFit(count, width) {
+  const slot = (width - MARGIN.left - MARGIN.right) / Math.max(1, count);
+  const thickness = Math.max(2, Math.min(COLUMN_MAX, slot - 2));
+  return { thickness, inset: thickness / 2 + 2 };
+}
+
 function renderStack(frame, chart, days, width) {
   const totals = days.map((day) => chart.series.reduce((sum, s) => sum + (day[s.key] ?? 0), 0));
-  const plot = createPlot(chart, days, width, niceTicks(0, Math.max(...totals)), (day) => shortDate(day.date));
-  const slot = (width - MARGIN.left - MARGIN.right) / Math.max(1, days.length - 1);
-  const thickness = Math.max(2, Math.min(COLUMN_MAX, slot - 2));
+  const { thickness, inset } = columnFit(days.length, width);
+  const plot = createPlot(chart, days, width, niceTicks(0, Math.max(...totals)), (day) => shortDate(day.date), inset);
   const gap = thickness >= 6 ? 2 : 0;
 
   days.forEach((day, i) => {
@@ -350,18 +399,19 @@ function histogramData(days, key, width) {
 }
 
 function renderHistogram(frame, chart, data, width) {
+  const { thickness, inset } = columnFit(data.items.length, width);
   const plot = createPlot(
     chart,
     data.items,
     width,
     niceTicks(0, Math.max(...data.items.map((item) => item.count))),
     (item) => `${item.bucket}`,
+    inset,
   );
-  const slot = (width - MARGIN.left - MARGIN.right) / Math.max(1, data.items.length - 1);
-  const thickness = Math.max(2, Math.min(COLUMN_MAX, slot - 2));
   data.items.forEach((item, i) => {
     if (item.count === 0) return;
-    column(plot, plot.node, plot.x(i), thickness, plot.y(item.count), plot.y(0), chart.color, true);
+    const zone = chart.zones?.find((z) => item.bucket < z.below);
+    column(plot, plot.node, plot.x(i), thickness, plot.y(item.count), plot.y(0), zone?.color ?? chart.color, true);
   });
   frame.appendChild(plot.node);
   addHover(frame, plot, data.items, chart, width, (tip, item) => {
@@ -371,7 +421,16 @@ function renderHistogram(frame, chart, data, width) {
 }
 
 function legend(parent, chart) {
-  if (!chart.series || chart.series.length < 2) return;
+  if (chart.zones) {
+    const zones = html('ul', 'hd-legend', undefined, parent);
+    chart.zones.forEach((zone) => {
+      const item = html('li', '', undefined, zones);
+      html('span', 'hd-key hd-key--block', undefined, item).style.background = zone.color;
+      item.append(zone.label);
+    });
+    return;
+  }
+  if (!chart.series || (chart.series.length < 2 && !chart.range)) return;
   const list = html('ul', 'hd-legend', undefined, parent);
   chart.series.forEach((series) => {
     const item = html('li', '', undefined, list);
@@ -379,6 +438,11 @@ function legend(parent, chart) {
     key.style.background = series.color;
     item.append(series.label);
   });
+  if (chart.range) {
+    const item = html('li', '', undefined, list);
+    html('span', 'hd-key hd-key--block hd-key--band', undefined, item);
+    item.append(chart.range.label);
+  }
 }
 
 const raw = 'var(--hd-raw)';
@@ -410,7 +474,27 @@ const trends = (title, sub, format, series, extra = {}) => ({
   ...extra,
 });
 
-const distribution = (title, key, bucket, unit, color) => ({ kind: 'histogram', title, key, bucket, unit, color, formatAxis: compact });
+const good = 'var(--hd-good)';
+const warning = 'var(--hd-warning)';
+const critical = 'var(--hd-critical)';
+
+const distribution = (title, key, bucket, unit, color, zones) => ({
+  kind: 'histogram', title, key, bucket, unit, color, zones, formatAxis: compact,
+});
+
+const SLEEP_HR_ZONES = [
+  { below: 50, label: 'Athletic (<50)', color: good },
+  { below: 60, label: 'Good (50-60)', color: s1 },
+  { below: 70, label: 'Average (60-70)', color: warning },
+  { below: Infinity, label: 'Elevated (>70)', color: critical },
+];
+
+const HRV_ZONES = [
+  { below: 20, label: 'Very low (<20)', color: critical },
+  { below: 50, label: 'Below average (20-50)', color: warning },
+  { below: 100, label: 'Good (50-100)', color: s1 },
+  { below: Infinity, label: 'Excellent (>100)', color: good },
+];
 
 const SECTIONS = [
   {
@@ -420,8 +504,8 @@ const SECTIONS = [
       trends('Sleep duration', 'Hours, 7-day average', hours, [
         { key: 'in_bed_ma', label: 'Main sleep span', color: s2 },
         { key: 'asleep_ma', label: 'Time asleep', color: s1 },
-      ], { formatAxis: (v) => `${v}h`, zeroBase: true }),
-      trends('Bedtime and wake time', 'Local time, 7-day average', clock, [
+      ], { formatAxis: (v) => `${v}h`, zeroBase: true, range: { low: 7, high: 9, label: 'Ideal: 7-9 h asleep' } }),
+      trends('Bedtime and wake time', 'Local time, 7-day average. No fixed target; consistency matters most.', clock, [
         { key: 'wake_axis_ma', label: 'Wake time', color: s2 },
         { key: 'bed_axis_ma', label: 'Bedtime', color: s1 },
       ], { formatAxis: clock, time: true }),
@@ -429,7 +513,7 @@ const SECTIONS = [
         kind: 'stack',
         wide: true,
         title: 'Sleep stages',
-        sub: 'Hours per night. Apple Watch stages are estimates.',
+        sub: 'Hours per night. Ideal: deep 1-2 h, REM 1.5-2 h, awake under 30 min.',
         format: hours,
         formatAxis: (v) => `${v}h`,
         series: [
@@ -439,14 +523,40 @@ const SECTIONS = [
           { key: 'awake', label: 'Awake', color: s4 },
         ],
       },
+      daily('deep', 'Deep sleep', 'Hours per night', hours, {
+        zeroBase: true, inRangeCount: true, range: { low: 1, high: 2, label: 'Ideal: 1-2 h' }, formatAxis: (v) => `${v}h`,
+      }),
+      daily('rem', 'REM sleep', 'Hours per night', hours, {
+        zeroBase: true, inRangeCount: true, range: { low: 1.5, high: 2, label: 'Ideal: 1.5-2 h' }, formatAxis: (v) => `${v}h`,
+      }),
+      daily('core', 'Core sleep', 'Hours per night. Usually about half of total sleep.', hours, {
+        zeroBase: true, formatAxis: (v) => `${v}h`,
+      }),
+      daily('awake', 'Awake during the night', 'Hours per night', hours, {
+        zeroBase: true, inRangeCount: true, range: { low: 0, high: 0.5, label: 'Ideal: under 30 min' }, formatAxis: (v) => `${v}h`,
+      }),
       trends('Heart rate during sleep', 'Beats per minute, 7-day average', bpm, [
         { key: 'sleep_hr_ma', label: 'Average', color: s2 },
         { key: 'sleep_hr_low_ma', label: 'Lowest', color: s1 },
-      ]),
-      daily('sleep_hrv', 'HRV during sleep', 'SDNN in milliseconds', ms),
-      distribution('Sleep heart rate distribution', 'h_sleep', 2, 'bpm', s1),
-      distribution('Sleep HRV distribution', 'h_hrv', 5, 'ms', s1),
-      daily('breath', 'Breathing rate during sleep', 'Breaths per minute', (v) => `${fixed1(v)} br/min`),
+      ], {
+        guides: [
+          { value: 50, label: 'Athletic (<50)' },
+          { value: 60, label: 'Good (<60)' },
+          { value: 70, label: 'Elevated (>70)' },
+        ],
+      }),
+      daily('sleep_hrv', 'HRV during sleep', 'SDNN in milliseconds. A rough guide, as HRV varies with age.', ms, {
+        guides: [
+          { value: 20, label: 'Very low (20)' },
+          { value: 50, label: 'Below average (<50)' },
+          { value: 100, label: 'Excellent (100)' },
+        ],
+      }),
+      distribution('Sleep heart rate distribution', 'h_sleep', 2, 'bpm', s1, SLEEP_HR_ZONES),
+      distribution('Sleep HRV distribution', 'h_hrv', 5, 'ms', s1, HRV_ZONES),
+      daily('breath', 'Breathing rate during sleep', 'Breaths per minute', (v) => `${fixed1(v)} br/min`, {
+        range: { low: 12, high: 20, label: 'Normal: 12-20' },
+      }),
     ],
   },
   {
@@ -460,7 +570,9 @@ const SECTIONS = [
       ], { wide: true }),
       distribution('Awake heart rate distribution', 'h_awake', 2, 'bpm', s1),
       distribution('Workout heart rate distribution', 'h_workout', 2, 'bpm', s2),
-      daily('resting_hr', 'Resting heart rate', 'Beats per minute', bpm),
+      daily('resting_hr', 'Resting heart rate', 'Beats per minute. Below 60 is not always a concern, especially if you train.', bpm, {
+        range: { low: 60, high: 100, label: 'Normal: 60-100 bpm' },
+      }),
       daily('vo2', 'VO2 max', 'ml/kg/min, estimated by Apple Watch', fixed1),
     ],
   },
@@ -468,32 +580,42 @@ const SECTIONS = [
     title: '3. Activity',
     sub: 'Steps, calories and exercise',
     charts: [
-      daily('steps', 'Daily steps', 'Steps', round, { wide: true, zeroBase: true, formatAxis: compact }),
+      daily('steps', 'Daily steps', 'Steps. Earlier months may be from iPhone only.', round, {
+        wide: true, zeroBase: true, formatAxis: compact, range: { low: 7000, label: 'Goal: 7,000+ steps' },
+      }),
       trends('Calories', 'kcal, 7-day average', (v) => `${round(v)} kcal`, [
         { key: 'total_kcal_ma', label: 'Total', color: s2 },
         { key: 'active_kcal_ma', label: 'Active', color: s1 },
       ], { zeroBase: true, formatAxis: compact }),
-      daily('exercise_min', 'Exercise time', 'Minutes per day', (v) => `${round(v)} min`, { zeroBase: true }),
+      daily('exercise_min', 'Exercise time', 'Minutes per day', (v) => `${round(v)} min`, {
+        zeroBase: true, range: { low: 21, label: 'Goal: 21+ min (150 per week)' },
+      }),
     ],
   },
   {
     title: '4. Oxygen and temperature',
     sub: 'Blood oxygen, breathing and wrist temperature',
     charts: [
-      daily('spo2', 'Blood oxygen', 'Average percent per day', (v) => `${fixed1(v)}%`),
-      daily('breathing_dist', 'Breathing disturbances', 'Per night, from Apple Watch', fixed1, { zeroBase: true }),
-      daily('wrist_temp', 'Wrist temperature during sleep', 'Degrees Celsius', (v) => `${v.toFixed(2)} C`),
+      daily('spo2', 'Blood oxygen', 'Average percent per day', (v) => `${fixed1(v)}%`, {
+        range: { low: 95, high: 100, label: 'Normal: 95-100%' },
+        guides: [
+          { value: 90, label: 'Low (<90%)' },
+          { value: 95, label: 'Below normal (90-95%)' },
+        ],
+      }),
+      daily('breathing_dist', 'Breathing disturbances', 'Per night. Apple does not publish a numeric target.', fixed1, { zeroBase: true }),
+      daily('wrist_temp', 'Wrist temperature during sleep', 'Degrees Celsius. Compare with your own baseline.', (v) => `${v.toFixed(2)} C`),
     ],
   },
 ];
 
 const TILES = [
-  { key: 'asleep', label: 'Time asleep', format: hours },
-  { key: 'sleep_hr', label: 'Sleep heart rate', format: bpm },
-  { key: 'sleep_hrv', label: 'Sleep HRV', format: ms },
-  { key: 'resting_hr', label: 'Resting heart rate', format: bpm },
-  { key: 'steps', label: 'Daily steps', format: round },
-  { key: 'spo2', label: 'Blood oxygen', format: (v) => `${fixed1(v)}%` },
+  { key: 'asleep', label: 'Time asleep', format: hours, reference: 'Ideal 7-9 h' },
+  { key: 'sleep_hr', label: 'Sleep heart rate', format: bpm, reference: 'Good 50-60 bpm' },
+  { key: 'sleep_hrv', label: 'Sleep HRV', format: ms, reference: 'Good 50-100 ms' },
+  { key: 'resting_hr', label: 'Resting heart rate', format: bpm, reference: 'Normal 60-100 bpm' },
+  { key: 'steps', label: 'Daily steps', format: round, reference: 'Goal 7,000+' },
+  { key: 'spo2', label: 'Blood oxygen', format: (v) => `${fixed1(v)}%`, reference: 'Normal 95-100%' },
 ];
 
 const hasData = (days, chart) => chart.series.some((s) => {
@@ -501,8 +623,8 @@ const hasData = (days, chart) => chart.series.some((s) => {
   return chart.kind === 'stack' ? count > 0 : !s.thin && count >= 2;
 });
 
-function renderTiles(parent, days) {
-  html('p', 'hd-tiles-title', 'Averages across all data', parent);
+function renderTiles(parent, allDays) {
+  const days = watchPeriod(allDays);
   const grid = html('div', 'hd-tiles', undefined, parent);
   TILES.forEach((tile) => {
     const values = days.map((d) => d[tile.key]).filter(Number.isFinite);
@@ -510,10 +632,25 @@ function renderTiles(parent, days) {
     const card = html('div', 'hd-tile', undefined, grid);
     html('span', 'hd-tile__label', tile.label, card);
     html('span', 'hd-tile__value', tile.format(values.reduce((a, b) => a + b, 0) / values.length), card);
+    if (tile.reference) html('span', 'hd-tile__reference', tile.reference, card);
   });
 }
 
-function addChart(grid, chart, days) {
+// Starts each chart at its own first reading, so a metric with a long history cannot squeeze the rest.
+function fromFirstReading(days, chart) {
+  const first = days.findIndex((day) => chart.series.some((s) => Number.isFinite(day[s.key])));
+  return first > 0 ? days.slice(first) : days;
+}
+
+function inRangeNote(chart, days) {
+  if (!chart.inRangeCount) return '';
+  const values = days.map((day) => day[chart.series[0].key]).filter(Number.isFinite);
+  const hits = values.filter((v) => v >= chart.range.low && v <= chart.range.high).length;
+  return `. In range on ${hits} of ${values.length} nights.`;
+}
+
+function addChart(grid, chart, allDays) {
+  const days = chart.series ? fromFirstReading(allDays, chart) : allDays;
   const data = chart.kind === 'histogram' ? histogramData(days, chart.key, chart.bucket) : null;
   if (chart.kind === 'histogram' ? !data : !hasData(days, chart)) return null;
 
@@ -522,7 +659,7 @@ function addChart(grid, chart, days) {
   html('span', 'hd-chart__title', chart.title, caption);
   const sub = data
     ? `Mean ${data.mean.toFixed(1)} · Median ${data.median} · Mode ${data.mode} ${chart.unit}`
-    : chart.sub;
+    : `${chart.sub}${inRangeNote(chart, days)}`;
   html('span', 'hd-chart__sub', sub, caption);
   legend(figure, chart);
   const frame = html('div', 'hd-frame', undefined, figure);
@@ -534,9 +671,152 @@ function addChart(grid, chart, days) {
   };
 }
 
+const TREND = {
+  better: { icon: '↗', text: 'Better' },
+  worse: { icon: '↘', text: 'Worse' },
+  same: { icon: '→', text: 'About the same' },
+  'on-target': { icon: '✓', text: 'On target' },
+  new: { icon: '·', text: 'New this week' },
+};
+
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+function renderFocus(parent, focus) {
+  const card = html('div', 'hd-focus', undefined, parent);
+  html('span', 'hd-focus__eyebrow', "This week's focus", card);
+  if (focus.allOnTrack) {
+    html('strong', 'hd-focus__title', 'Keep the routine going', card);
+    html('p', 'hd-focus__text', `Sleep, steps and exercise each hit target on most recent days. The lowest was ${focus.goal.label.toLowerCase()}, at ${focus.last.hits} of ${plural(focus.last.count, 'day')}.`, card);
+    return;
+  }
+  html('strong', 'hd-focus__title', `${focus.goal.action} on ${focus.nextTarget} of the next 7 days`, card);
+  const before = focus.previous.count ? `, compared with ${focus.previous.hits} of ${focus.previous.count} the week before` : '';
+  html('p', 'hd-focus__text', `Hit on ${focus.last.hits} of the last ${plural(focus.last.count, 'day')}${before}. Target: ${focus.goal.target}.`, card);
+}
+
+function renderWeeks(parent, weeks) {
+  html('h4', 'hd-block-title', 'Last 7 days vs the 7 before', parent);
+  const grid = html('div', 'hd-weeks', undefined, parent);
+  weeks.forEach(({ goal, last, previous, trend }) => {
+    const card = html('div', 'hd-week', undefined, grid);
+    html('span', 'hd-tile__label', goal.label, card);
+    html('span', 'hd-week__value', goal.format(last.average), card);
+    const line = html('span', `hd-week__trend hd-week__trend--${trend}`, undefined, card);
+    html('span', '', TREND[trend].icon, line).setAttribute('aria-hidden', 'true');
+    line.append(` ${TREND[trend].text}`);
+    const detail = previous.average === null ? `Target ${goal.target}` : `Was ${goal.format(previous.average)} · Target ${goal.target}`;
+    html('span', 'hd-tile__reference', detail, card);
+  });
+}
+
+function renderLevers(parent, levers, nights) {
+  html('h4', 'hd-block-title', 'What moves the needle', parent);
+  if (levers.length === 0) {
+    html('p', 'hd-block-sub', 'No clear patterns yet. These appear when a habit and a result differ clearly across at least 10 days each way.', parent);
+    return;
+  }
+  html('p', 'hd-block-sub', `Patterns from ${nights} days of data. They show what tends to go together, not what causes what.`, parent);
+  const grid = html('div', 'hd-levers', undefined, parent);
+  levers.forEach((lever) => {
+    const card = html('div', 'hd-lever', undefined, grid);
+    html('span', 'hd-lever__habit', lever.habit, card);
+    html('strong', 'hd-lever__result', `${lever.outcome.label}: ${lever.outcome.format(lever.withHabit)} vs ${lever.outcome.format(lever.without)}`, card);
+    const verdict = lever.helps ? 'Goes with better results' : 'Trade-off to watch';
+    html('span', `hd-lever__verdict hd-lever__verdict--${lever.helps ? 'helps' : 'costs'}`, `${lever.helps ? '↗' : '↘'} ${verdict}`, card);
+    html('span', 'hd-tile__reference', `${lever.countWith} days with, ${lever.countWithout} days ${lever.other}`, card);
+  });
+}
+
+function renderGrid(parent, rows, width) {
+  html('h4', 'hd-block-title', 'Days on target', parent);
+  const figure = html('figure', 'hd-chart', undefined, parent);
+  const legendList = html('ul', 'hd-legend', undefined, figure);
+  [['hd-swatch hd-swatch--hit', 'On target'], ['hd-swatch hd-swatch--miss', 'Off target'], ['hd-swatch', 'No data']].forEach(([className, label]) => {
+    const item = html('li', '', undefined, legendList);
+    html('span', className, undefined, item);
+    item.append(label);
+  });
+  const frame = html('div', 'hd-frame', undefined, figure);
+  const available = Math.max(260, Math.round(frame.clientWidth || width));
+  const narrow = available < 520;
+  const labelWidth = narrow ? 104 : 150;
+  const countWidth = 46;
+  const count = rows[0].cells.length;
+  const gap = 1;
+  const cell = Math.max(3, Math.min(16, (available - labelWidth - countWidth) / count - gap));
+  const rowHeight = Math.max(cell, 13) + 5;
+  const height = rows.length * rowHeight + 20;
+  const node = svg('svg', {
+    class: 'hd-plot',
+    viewBox: `0 0 ${available} ${height}`,
+    role: 'img',
+    tabindex: '0',
+    'aria-label': rows.map((row) => `${row.goal.label}: on target ${row.hits} of ${row.count} days`).join('. '),
+  });
+  rows.forEach((row, r) => {
+    const y = r * rowHeight;
+    const label = svg('text', { x: 0, y: y + rowHeight / 2 + 3 }, node);
+    label.textContent = row.goal.label;
+    const tally = svg('text', { x: available, y: y + rowHeight / 2 + 3, 'text-anchor': 'end' }, node);
+    tally.textContent = `${row.hits}/${row.count}`;
+    row.cells.forEach((item, c) => {
+      const attrs = { x: labelWidth + c * (cell + gap), y: y + (rowHeight - cell) / 2, width: cell, height: cell, rx: 1.5 };
+      if (item.hit === null) svg('rect', { ...attrs, fill: 'var(--hd-grid)' }, node);
+      else if (item.hit) svg('rect', { ...attrs, fill: 'var(--hd-good)' }, node);
+      else svg('rect', { ...attrs, fill: 'none', stroke: 'var(--hd-raw)', 'stroke-width': 1 }, node);
+    });
+  });
+  const dates = rows[0].cells;
+  [0, dates.length - 1].forEach((index) => {
+    const label = svg('text', {
+      x: labelWidth + index * (cell + gap) + (index ? cell : 0),
+      y: height - 4,
+      'text-anchor': index ? 'end' : 'start',
+    }, node);
+    label.textContent = shortDate(dates[index].date);
+  });
+  frame.appendChild(node);
+
+  const tip = html('div', 'hd-tip', undefined, frame);
+  tip.hidden = true;
+  node.addEventListener('pointerleave', () => { tip.hidden = true; });
+  const show = (event) => {
+    const rect = node.getBoundingClientRect();
+    const scale = available / rect.width;
+    const c = Math.floor(((event.clientX - rect.left) * scale - labelWidth) / (cell + gap));
+    const r = Math.floor(((event.clientY - rect.top) * scale) / rowHeight);
+    const row = rows[r];
+    const item = row?.cells[c];
+    if (!item) { tip.hidden = true; return; }
+    tip.replaceChildren();
+    html('div', 'hd-tip__date', longDate(item.date), tip);
+    html('div', 'hd-tip__name', row.goal.label, tip);
+    html('div', '', item.value === null ? 'No data' : `${row.goal.format(item.value)} · ${item.hit ? 'On target' : 'Off target'} (${row.goal.target})`, tip);
+    tip.hidden = false;
+    const px = (event.clientX - rect.left);
+    const left = px + 12 + tip.offsetWidth > frame.clientWidth ? px - tip.offsetWidth - 12 : px + 12;
+    tip.style.transform = `translate(${Math.max(0, left)}px, ${event.clientY - rect.top + 12}px)`;
+  };
+  node.addEventListener('pointermove', show);
+  node.addEventListener('pointerdown', show);
+}
+
+function renderOverview(content, allDays) {
+  const today = new Date().toLocaleDateString('en-CA');
+  const days = completeDays(watchPeriod(allDays), today);
+  if (days.length === 0) return;
+  const section = html('div', 'hd-overview', undefined, content);
+  const weeks = compareWeeks(days);
+  const focus = chooseFocus(weeks);
+  if (focus) renderFocus(section, focus);
+  renderWeeks(section, weeks);
+  renderLevers(section, findLevers(days), days.length);
+  const rows = targetGrid(days);
+  if (rows.length) renderGrid(section, rows, content.clientWidth);
+}
+
 function render(content, days) {
   content.replaceChildren();
-  renderTiles(content, days);
 
   SECTIONS.forEach((section) => {
     const heading = html('div', 'hd-section', undefined, content);
@@ -548,6 +828,9 @@ function render(content, days) {
     draws.forEach((draw) => draw());
     if (draws.length === 0) heading.remove();
   });
+
+  renderOverview(content, days);
+  renderTiles(content, days);
 }
 
 async function main() {
@@ -568,8 +851,7 @@ async function main() {
   const days = fillDays(file.days);
   prepare(days);
 
-  const updated = file.last_ingest_at ?? file.generated_at;
-  status.textContent = `Last updated ${new Date(updated * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
+  status.remove();
 
   const content = html('div', '', undefined, root);
   render(content, days);
