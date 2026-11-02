@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GOALS, activityTotals, addRegularity, peakHeartRate, regularityBetween, weeklySummaries, compareWeeks, completeDays, findLevers, onTarget, targetGrid, watchPeriod, clock, noonMinutes } from "../assets/js/health-insights.js";
+import { GOALS, addRegularity, regularityBetween, weeklySummaries, compareWeeks, completeDays, findLevers, onTarget, targetGrid, watchPeriod, clock, noonMinutes } from "../assets/js/health-insights.js";
 const date = (i) => new Date(Date.UTC(2026, 8, 1) + i * 864e5).toISOString().slice(0, 10);
 const goal = (k) => GOALS.find((g) => g.key === k);
 const series = (n, f) => Array.from({ length: n }, (_, i) => ({ date: date(i), ...f(i) }));
@@ -80,27 +80,12 @@ test("clock helpers round-trip across midnight", () => {
   assert.equal(clock(noonMinutes(60)), "01:00"); assert.equal(clock(noonMinutes(23 * 60)), "23:00");
   assert.ok(noonMinutes(60) > noonMinutes(23 * 60));
 });
-test("peak heart rate ignores a single bad reading", () => {
-  const h_workout = { 140: 500, 170: 500, 220: 1 };
-  assert.equal(peakHeartRate([{ h_workout }]), 170);
-  assert.equal(peakHeartRate([{}]), null);
-});
 test("weeks are Monday based and only full weeks count", () => {
   const start = Date.UTC(2026, 8, 7);
   const d = Array.from({ length: 10 }, (_, i) => ({ date: new Date(start + i * 864e5).toISOString().slice(0, 10), strength_count: i === 0 ? 1 : 0, workout_count: 1 }));
   const w = weeklySummaries(d);
   assert.equal(w.length, 1); assert.equal(w[0].date, "2026-09-07");
   assert.equal(w[0].strength, 1); assert.equal(w[0].workouts, 7);
-});
-test("zone minutes use the share of peak heart rate", () => {
-  const start = Date.UTC(2026, 8, 7);
-  const d = Array.from({ length: 7 }, (_, i) => ({ date: new Date(start + i * 864e5).toISOString().slice(0, 10), h_workout: { 200: 10 }, h_zone: i === 0 ? { 100: 10, 125: 20, 145: 30, 165: 40, 190: 50, 80: 99 } : {} }));
-  const [w] = weeklySummaries(d);
-  assert.deepEqual([w.z1, w.z2, w.z3, w.z4, w.z5], [10, 20, 30, 40, 50]);
-});
-test("activities add up and sort by minutes", () => {
-  const a = activityTotals([{ h_activity: { running: 30, strength: 10 } }, { h_activity: { strength: 50 } }, {}]);
-  assert.deepEqual(a.map((x) => x.name), ["strength", "running"]); assert.equal(a[0].minutes, 60);
 });
 test("regularity is 100 for identical days and falls as times move apart", () => {
   const night = { bed: 660, wake: 1140 };

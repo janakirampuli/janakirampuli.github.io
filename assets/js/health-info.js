@@ -132,19 +132,10 @@ const INFO = {
     ideal: 'A bigger drop is generally better. Compare it with your own trend.',
     help: 'Regular aerobic exercise tends to improve it over time.',
   },
-  'Weekly time in heart rate zones': {
-    what: 'Active minutes each week, grouped by how close your heart rate was to your maximum. Your maximum here is estimated from your highest recorded readings, so a lab test could differ.',
-    ideal: 'Depends on your goal. Most training plans use a mix of easier and harder work.',
-    help: 'Compare weeks to see whether your training is getting easier, harder or longer.',
-  },
   'Strength sessions per week': {
     what: 'Workouts logged on the watch as strength or core training. Sessions you do not log are not counted.',
     ideal: 'A common guideline is at least 2 sessions a week.',
     help: 'Start a strength workout on the watch so the session is counted.',
-  },
-  'Workouts by type': {
-    what: 'Total minutes of workouts you logged, grouped by the workout type chosen on the watch.',
-    ideal: 'No fixed target. A mix of cardio and strength work is commonly recommended.',
   },
   'Daily steps': steps,
   Steps: steps,

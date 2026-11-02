@@ -12,11 +12,6 @@
   --hd-s2: #eb6834;
   --hd-s3: #1baf7a;
   --hd-s4: #eda100;
-  --hd-z1: #6da7ec;
-  --hd-z2: #3987e5;
-  --hd-z3: #256abf;
-  --hd-z4: #184f95;
-  --hd-z5: #0d366b;
   --hd-good: #0ca30c;
   --hd-warning: #fab219;
   --hd-critical: #d03b3b;
@@ -54,11 +49,6 @@ html.dark-mode .hd {
   --hd-s2: #d95926;
   --hd-s3: #199e70;
   --hd-s4: #c98500;
-  --hd-z1: #184f95;
-  --hd-z2: #256abf;
-  --hd-z3: #3987e5;
-  --hd-z4: #6da7ec;
-  --hd-z5: #9ec5f4;
 }
 
 .hd-status {

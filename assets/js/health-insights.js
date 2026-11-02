@@ -180,37 +180,9 @@ export function targetGrid(days) {
   }).filter((row) => row.count > 0);
 }
 
-const ZONE_BOUNDS = [0.5, 0.6, 0.7, 0.8, 0.9];
-const PEAK_PERCENTILE = 0.995;
 const REGULARITY_WINDOW = 7;
 const REGULARITY_MIN_PAIRS = 4;
 const MINUTES_IN_DAY = 1440;
-
-// Uses a high percentile, because a single bad reading can be far above the true peak.
-export function peakHeartRate(days) {
-  const counts = new Map();
-  days.forEach((day) => {
-    Object.entries(day.h_workout ?? {}).forEach(([bucket, count]) => {
-      counts.set(Number(bucket), (counts.get(Number(bucket)) ?? 0) + count);
-    });
-  });
-  const total = [...counts.values()].reduce((a, b) => a + b, 0);
-  if (total === 0) return null;
-  let running = 0;
-  for (const bucket of [...counts.keys()].sort((a, b) => a - b)) {
-    running += counts.get(bucket);
-    if (running >= total * PEAK_PERCENTILE) return bucket;
-  }
-  return null;
-}
-
-function zoneIndex(heartRate, peak) {
-  const share = heartRate / peak;
-  for (let index = ZONE_BOUNDS.length - 1; index >= 0; index -= 1) {
-    if (share >= ZONE_BOUNDS[index]) return index;
-  }
-  return -1;
-}
 
 const mondayOf = (date) => {
   const time = Date.parse(`${date}T00:00:00Z`);
@@ -220,23 +192,16 @@ const mondayOf = (date) => {
 
 // Only full weeks are kept, so a partial week never reads as falling short of a weekly goal.
 export function weeklySummaries(days) {
-  const peak = peakHeartRate(days);
   const weeks = new Map();
   days.forEach((day) => {
     const key = mondayOf(day.date);
     if (!weeks.has(key)) {
-      weeks.set(key, { date: key, days: 0, strength: 0, workouts: 0, zones: [0, 0, 0, 0, 0] });
+      weeks.set(key, { date: key, days: 0, strength: 0, workouts: 0 });
     }
     const week = weeks.get(key);
     week.days += 1;
     if (finite(day.strength_count)) week.strength += day.strength_count;
     if (finite(day.workout_count)) week.workouts += day.workout_count;
-    if (peak) {
-      Object.entries(day.h_zone ?? {}).forEach(([bucket, minutes]) => {
-        const zone = zoneIndex(Number(bucket) + 2.5, peak);
-        if (zone >= 0) week.zones[zone] += minutes;
-      });
-    }
   });
   return [...weeks.values()]
     .filter((week) => week.days === WEEK)
@@ -244,24 +209,7 @@ export function weeklySummaries(days) {
       date: week.date,
       strength: week.strength,
       workouts: week.workouts,
-      z1: week.zones[0],
-      z2: week.zones[1],
-      z3: week.zones[2],
-      z4: week.zones[3],
-      z5: week.zones[4],
     }));
-}
-
-export function activityTotals(days) {
-  const totals = new Map();
-  days.forEach((day) => {
-    Object.entries(day.h_activity ?? {}).forEach(([name, minutes]) => {
-      totals.set(name, (totals.get(name) ?? 0) + minutes);
-    });
-  });
-  return [...totals.entries()]
-    .map(([name, minutes]) => ({ name, minutes }))
-    .sort((a, b) => b.minutes - a.minutes);
 }
 
 // The share of minutes spent in the same state, asleep or awake, 24 hours apart, scaled so 100 means identical.

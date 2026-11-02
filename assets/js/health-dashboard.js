@@ -1,6 +1,6 @@
 import { infoFor } from './health-info.js';
 import {
-  activityTotals, addRegularity, compareWeeks, completeDays, findLevers, peakHeartRate,
+  addRegularity, compareWeeks, completeDays, findLevers,
   targetGrid, watchPeriod, weeklySummaries,
 } from './health-insights.js';
 
@@ -584,15 +584,6 @@ const HRV_ZONES = [
   { below: Infinity, label: 'Excellent (>100)', color: good },
 ];
 
-const ACTIVITY_NAMES = {
-  strength: 'Strength', functionalStrength: 'Functional strength', core: 'Core', hiit: 'HIIT', running: 'Running',
-  walking: 'Walking', hiking: 'Hiking', cycling: 'Cycling', swimming: 'Swimming', rowing: 'Rowing',
-  elliptical: 'Elliptical', stairs: 'Stairs', crossTraining: 'Cross training', yoga: 'Yoga', pilates: 'Pilates',
-  cardio: 'Cardio', cricket: 'Cricket', badminton: 'Badminton', tennis: 'Tennis', football: 'Football',
-  basketball: 'Basketball', other: 'Other',
-};
-const activityLabel = (name) => ACTIVITY_NAMES[name] ?? 'Other';
-
 const stageTrend = (name, key, sub, range) => ({
   name,
   ...daily(key, name, sub, hours, { zeroBase: true, range, formatAxis: (v) => `${v}h` }),
@@ -698,25 +689,8 @@ const SECTIONS = [
     sub: 'Steps, calories and exercise',
     charts: [
       daily('steps', 'Daily steps', 'Steps', round, {
-        wide: true, zeroBase: true, formatAxis: compact, range: { low: 7000, label: 'Goal: 7,000+ steps' },
+        zeroBase: true, formatAxis: compact, range: { low: 7000, label: 'Goal: 7,000+ steps' },
       }),
-      {
-        kind: 'stack',
-        weekly: true,
-        wide: true,
-        showsPeak: true,
-        title: 'Weekly time in heart rate zones',
-        sub: 'Minutes of active heart rate per week.',
-        format: (v) => `${Math.round(v)} min`,
-        formatAxis: compact,
-        series: [
-          { key: 'z1', label: 'Zone 1 (50-60%)', color: 'var(--hd-z1)' },
-          { key: 'z2', label: 'Zone 2 (60-70%)', color: 'var(--hd-z2)' },
-          { key: 'z3', label: 'Zone 3 (70-80%)', color: 'var(--hd-z3)' },
-          { key: 'z4', label: 'Zone 4 (80-90%)', color: 'var(--hd-z4)' },
-          { key: 'z5', label: 'Zone 5 (90%+)', color: 'var(--hd-z5)' },
-        ],
-      },
       {
         kind: 'stack',
         weekly: true,
@@ -727,12 +701,6 @@ const SECTIONS = [
         wholeTicks: true,
         guides: [{ value: 2, label: 'Goal: 2 sessions' }],
         series: [{ key: 'strength', label: 'Strength', color: s1 }],
-      },
-      {
-        kind: 'ranked',
-        wide: true,
-        title: 'Workouts by type',
-        sub: 'Total minutes of logged workouts.',
       },
       trends('Calories', 'kcal, 7-day average', (v) => `${round(v)} kcal`, [
         { key: 'total_kcal_ma', label: 'Total', color: s2 },
@@ -915,43 +883,8 @@ function addSwitchChart(grid, chart, allDays) {
   return draw;
 }
 
-function renderRanked(frame, chart, rows, width) {
-  const left = width < 520 ? 104 : 150;
-  const right = 64;
-  const rowHeight = 26;
-  const height = rows.length * rowHeight;
-  const max = Math.max(...rows.map((row) => row.minutes));
-  const node = svg('svg', {
-    class: 'hd-plot',
-    viewBox: `0 0 ${width} ${height}`,
-    role: 'img',
-    'aria-label': rows.map((row) => `${activityLabel(row.name)}: ${Math.round(row.minutes)} minutes`).join('. '),
-  });
-  rows.forEach((row, index) => {
-    const middle = index * rowHeight + rowHeight / 2;
-    const label = svg('text', { x: 0, y: middle + 4 }, node);
-    label.textContent = activityLabel(row.name);
-    svg('rect', {
-      x: left, y: middle - 8, width: Math.max(2, (row.minutes / max) * (width - left - right)), height: 16, rx: 3, fill: 'var(--hd-s1)',
-    }, node);
-    const value = svg('text', { class: 'hd-end', x: width, y: middle + 4, 'text-anchor': 'end' }, node);
-    value.textContent = `${Math.round(row.minutes).toLocaleString()} min`;
-  });
-  frame.appendChild(node);
-}
-
 function addChart(grid, chart, allDays) {
   if (chart.kind === 'switch') return addSwitchChart(grid, chart, allDays);
-  const activities = chart.kind === 'ranked' ? activityTotals(allDays) : null;
-  if (activities) {
-    if (activities.length === 0) return null;
-    const figure = html('figure', `hd-chart${chart.wide ? ' hd-chart--wide' : ''}`, undefined, grid);
-    const caption = html('figcaption', '', undefined, figure);
-    infoButton(html('span', 'hd-chart__title', chart.title, caption), chart.title);
-    html('span', 'hd-chart__sub', chart.sub, caption);
-    const frame = html('div', 'hd-frame', undefined, figure);
-    return () => renderRanked(frame, chart, activities, Math.max(260, Math.round(frame.clientWidth)));
-  }
   const source = chart.weekly
     ? weeklySummaries(completeDays(allDays, new Date().toLocaleDateString('en-CA')))
     : allDays;
@@ -966,8 +899,7 @@ function addChart(grid, chart, allDays) {
   const sub = data
     ? `Mean ${data.mean.toFixed(1)} · Median ${data.median} · Mode ${data.mode} ${chart.unit}`
     : chart.sub;
-  const peak = chart.showsPeak ? peakHeartRate(allDays) : null;
-  html('span', 'hd-chart__sub', peak ? `${sub} Zones use your highest recorded heart rates, about ${peak} bpm, as your maximum.` : sub, caption);
+  html('span', 'hd-chart__sub', sub, caption);
   if (profile) {
     const list = html('ul', 'hd-legend', undefined, figure);
     const average = html('li', '', undefined, list);
