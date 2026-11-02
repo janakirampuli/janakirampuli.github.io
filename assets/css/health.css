@@ -56,8 +56,17 @@ html.dark-mode .hd {
   margin: 0 0 8px;
 }
 
-.hd-overview {
-  margin-top: 36px;
+.hd-overview > .hd-block-title:first-child {
+  margin-top: 0;
+}
+
+.hd-findings {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+
+#main_content .hd-findings li {
+  margin: 2px 0;
 }
 
 .hd-block-title {

@@ -60,6 +60,11 @@ const exercise = {
 };
 const distribution = (what, ideal) => ({ what, ideal });
 
+const wristTemp = {
+  what: 'Skin temperature at the wrist overnight. Your room and bedding can affect it, so it is not a body temperature reading.',
+  ideal: 'No fixed target. Compare it with your own usual level.',
+};
+
 const INFO = {
   'Time asleep': asleep,
   'Sleep duration': {
@@ -151,10 +156,25 @@ const INFO = {
     ideal: 'Apple only labels these as elevated or not elevated, and does not publish a numeric target.',
     help: 'Alcohol and colds can raise them. If you snore loudly or wake unrefreshed, ask a doctor.',
   },
-  'Wrist temperature during sleep': {
-    what: 'Skin temperature at the wrist overnight. Your room and bedding can affect it, so it is not a body temperature reading.',
-    ideal: 'No fixed target. Compare it with your own usual level.',
+  'Wrist temperature during sleep': wristTemp,
+  'Wrist temperature': wristTemp,
+  'Bedtime and time asleep': {
+    what: 'Each dot is one night, placed by when you fell asleep and how long you slept. The line shows the overall trend.',
+    ideal: 'Dots inside the shaded 7-9 h band. A line sloping down means later nights cost you sleep.',
+    help: SLEEP_HELP,
   },
+  'Bedtime and wake time': {
+    what: 'Each dot is one night, placed by when you fell asleep and when you woke up. The line shows the overall trend.',
+    ideal: 'If the line is flatter than one hour per hour, your wake time is fixed and a late night shortens your sleep.',
+    help: 'If your wake time is fixed, an earlier bedtime is the main way to sleep longer.',
+  },
+  'Weekend shift': {
+    what: 'How much later the middle of your sleep is on Friday and Saturday nights than on Sunday to Thursday nights.',
+    ideal: 'Under 1 hour.',
+    help: 'Keep weekend bedtimes and wake times within an hour of your weeknight ones.',
+  },
+  'Weeknight sleep': asleep,
+  'Weekend sleep': asleep,
 };
 
 export const infoFor = (name) => INFO[name] ?? null;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GOALS, addRegularity, regularityBetween, weeklySummaries, compareWeeks, completeDays, findLevers, onTarget, targetGrid, watchPeriod, clock, noonMinutes } from "../assets/js/health-insights.js";
+import { GOALS, addRegularity, regularityBetween, weeklySummaries, compareWeeks, completeDays, findLevers, onTarget, targetGrid, watchPeriod, clock, noonMinutes, vitalsCheck, bedtimeEffect, weekendShift, fit } from "../assets/js/health-insights.js";
 const date = (i) => new Date(Date.UTC(2026, 8, 1) + i * 864e5).toISOString().slice(0, 10);
 const goal = (k) => GOALS.find((g) => g.key === k);
 const series = (n, f) => Array.from({ length: n }, (_, i) => ({ date: date(i), ...f(i) }));
@@ -103,4 +103,47 @@ test("rolling regularity needs enough nights and handles midnight", () => {
   const gap = series(3, (i) => (i === 1 ? {} : { bedtime: 60, wake_time: 480 }));
   addRegularity(gap);
   assert.equal(gap[2].regularity, undefined);
+});
+test("habits that fall on the same days are reported once per result", () => {
+  const d = series(40, (i) => ({ steps: i % 2 ? 9000 : 2000, exercise_min: i % 2 ? 60 : 0, sleep_hr: (i % 2 ? 60 : 66) + (i % 3) }));
+  const l = findLevers(d).filter((x) => x.outcome.key === "sleep_hr");
+  assert.equal(l.length, 1);
+  assert.equal(l[0].split, undefined);
+});
+test("vitals flag only clear moves away from the usual range", () => {
+  const d = series(30, (i) => ({ asleep: 7, sleep_hrv: 70 + (i % 5) - 2, sleep_hr: 60 + (i % 3) - 1, breath: 16 }));
+  d.push({ date: date(30), asleep: 7, sleep_hrv: 50, sleep_hr: 70, breath: 16 });
+  const check = vitalsCheck(d);
+  const row = (k) => check.rows.find((r) => r.vital.key === k);
+  assert.equal(check.date, date(30));
+  assert.equal(row("sleep_hrv").direction, -1); assert.equal(row("sleep_hrv").concern, true);
+  assert.equal(row("sleep_hr").direction, 1); assert.equal(row("breath").direction, 0);
+  assert.equal(check.concerns, 2);
+  assert.equal(row("sleep_hrv").nights, 28);
+});
+test("vitals need two weeks of history", () => {
+  assert.equal(vitalsCheck(series(10, () => ({ asleep: 7, sleep_hrv: 70 }))), null);
+});
+test("the trend fit ignores a single extreme night", () => {
+  const points = Array.from({ length: 20 }, (_, i) => [i, 10 - 0.5 * i]);
+  points.push([40, 30]);
+  const line = fit(points);
+  assert.equal(line.slope, -0.5);
+  assert.ok(line.r < -0.6);
+});
+test("bedtime effect reads per hour and hides weak links", () => {
+  const d = series(30, (i) => ({ bedtime: (23 * 60 + (i % 6) * 30) % 1440, wake_time: 8 * 60, asleep: 9 - (i % 6) * 0.5, deep: 1 + ((i * 7) % 5) * 0.1 }));
+  const e = bedtimeEffect(d);
+  assert.ok(Math.abs(e.asleep.slope + 1) < 1e-9);
+  assert.equal(e.wake, null);
+  assert.equal(e.deep, null);
+  assert.equal(bedtimeEffect(d.slice(0, 10)), null);
+});
+test("weekend shift uses Friday and Saturday nights", () => {
+  const d = series(21, (i) => {
+    const weekend = [0, 6].includes(new Date(Date.parse(`${date(i)}T00:00:00Z`)).getUTCDay());
+    return { bedtime: weekend ? 120 : 0, wake_time: weekend ? 600 : 480, asleep: weekend ? 8 : 8 };
+  });
+  const w = weekendShift(d);
+  assert.equal(w.shift, 120); assert.equal(w.free.count, 6); assert.equal(w.work.count, 15);
 });

@@ -1,7 +1,7 @@
 import { infoFor } from './health-info.js';
 import {
-  addRegularity, compareWeeks, completeDays, findLevers,
-  targetGrid, watchPeriod, weeklySummaries,
+  addRegularity, bedtimeEffect, compareWeeks, completeDays, findLevers,
+  targetGrid, vitalsCheck, watchPeriod, weekendShift, weeklySummaries,
 } from './health-insights.js';
 
 const root = document.getElementById('health-dashboard');
@@ -1036,13 +1036,260 @@ function renderGrid(parent, rows, width) {
   node.addEventListener('pointerdown', show);
 }
 
+const VITAL_STATUS = {
+  [-1]: { icon: '↓', text: 'Lower than usual' },
+  0: { icon: '✓', text: 'Usual' },
+  1: { icon: '↑', text: 'Higher than usual' },
+};
+
+function renderVitals(parent, check) {
+  html('h4', 'hd-block-title', 'Last night compared with your normal', parent);
+  const nights = Math.max(...check.rows.map((row) => row.nights));
+  const summary = check.concerns >= 2
+    ? `${check.concerns} overnight signs moved the way they often do with illness, hard training, alcohol or a late meal, so an easier day may help.`
+    : check.concerns === 1
+      ? 'One overnight sign moved outside your usual range. A single unusual night is common and usually not a concern.'
+      : 'Your overnight signs were within your usual range, or on the better side of it.';
+  html('p', 'hd-block-sub', `Night ending ${longDate(check.date)}. ${summary} Usual ranges come from your previous ${nights} nights.`, parent);
+  const grid = html('div', 'hd-weeks', undefined, parent);
+  check.rows.forEach((row) => {
+    const card = html('div', 'hd-week', undefined, grid);
+    infoButton(html('span', 'hd-tile__label', row.vital.label, card), row.vital.label);
+    html('span', 'hd-week__value', row.vital.format(row.value), card);
+    const status = VITAL_STATUS[row.direction];
+    const line = html('span', 'hd-week__trend', undefined, card);
+    html('span', '', row.concern ? '!' : status.icon, line).setAttribute('aria-hidden', 'true');
+    line.append(` ${status.text}`);
+    html('span', 'hd-tile__reference', `Usual ${row.vital.format(row.low)} to ${row.vital.format(row.high)}`, card);
+  });
+}
+
+const duration = (minutes) => {
+  const total = Math.round(Math.abs(minutes));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
+};
+
+function bedtimeFindings(effect) {
+  const lines = [];
+  const perHour = (line, what) => `${duration(line.slope * 60)} ${line.slope < 0 ? 'less' : 'more'} ${what}`;
+  if (effect.asleep) lines.push(`Each hour later you fall asleep goes with ${perHour(effect.asleep, 'sleep')}.`);
+  if (effect.asleep?.slope < 0 && effect.wake && effect.wake.slope > 0 && effect.wake.slope < 1) {
+    lines.push(`Your wake time moves only ${duration(effect.wake.slope * 60)} later for each hour later you fall asleep, so a late night mostly comes out of your sleep.`);
+  }
+  const stages = [['deep', 'deep sleep'], ['rem', 'REM sleep']].filter(([key]) => effect[key]);
+  if (stages.length) {
+    lines.push(`Each hour later also goes with ${stages.map(([key, what]) => perHour(effect[key], what)).join(' and ')}.`);
+  }
+  return lines;
+}
+
+function renderScatter(frame, spec, width) {
+  const { points } = spec;
+  const inner = width - MARGIN.left - MARGIN.right;
+  const height = MARGIN.top + PLOT_HEIGHT + MARGIN.bottom;
+  const xs = points.map((p) => p.x);
+  const xTicks = timeTicks(Math.min(...xs), Math.max(...xs));
+  const ys = points.map((p) => p.y);
+  const yBounds = spec.band ? [spec.band.low, spec.band.high] : [];
+  const yMin = Math.min(...ys, ...yBounds);
+  const yMax = Math.max(...ys, ...yBounds);
+  const pad = (yMax - yMin) * 0.08 || 1;
+  const yTicks = spec.time ? timeTicks(yMin, yMax) : niceTicks(Math.max(0, yMin - pad), yMax + pad);
+  const x0 = xTicks[0];
+  const x1 = xTicks[xTicks.length - 1];
+  const y0 = yTicks[0];
+  const y1 = yTicks[yTicks.length - 1];
+  const x = (v) => MARGIN.left + ((v - x0) / (x1 - x0)) * inner;
+  const y = (v) => MARGIN.top + PLOT_HEIGHT - ((v - y0) / (y1 - y0)) * PLOT_HEIGHT;
+  const node = svg('svg', {
+    class: 'hd-plot', viewBox: `0 0 ${width} ${height}`, role: 'img', tabindex: '0', 'aria-label': spec.label,
+  });
+  if (spec.band) {
+    svg('rect', {
+      x: MARGIN.left, y: y(spec.band.high), width: inner, height: y(spec.band.low) - y(spec.band.high), fill: 'var(--hd-band)',
+    }, node);
+  }
+  yTicks.forEach((tick, index) => {
+    svg('line', {
+      x1: MARGIN.left, x2: width - MARGIN.right, y1: y(tick), y2: y(tick),
+      stroke: index === 0 ? 'var(--hd-axis)' : 'var(--hd-grid)', 'stroke-width': 1,
+    }, node);
+    const label = svg('text', { x: MARGIN.left - 8, y: y(tick) + 4, 'text-anchor': 'end' }, node);
+    label.textContent = spec.formatAxis(tick);
+  });
+  xTicks.forEach((tick) => {
+    const label = svg('text', { x: x(tick), y: height - 8, 'text-anchor': 'middle' }, node);
+    label.textContent = clock(tick);
+  });
+  if (spec.band) {
+    const label = svg('text', { class: 'hd-guide', x: MARGIN.left + 6, y: y(spec.band.high) + 16 }, node);
+    label.textContent = spec.band.label;
+  }
+  if (spec.line) {
+    const from = Math.min(...xs);
+    const to = Math.max(...xs);
+    svg('line', {
+      x1: x(from), x2: x(to), y1: y(spec.line(from)), y2: y(spec.line(to)),
+      stroke: 'var(--hd-s2)', 'stroke-width': 2, 'stroke-linecap': 'round',
+    }, node);
+  }
+  points.forEach((p) => {
+    svg('circle', { cx: x(p.x), cy: y(p.y), r: 4, fill: 'var(--hd-s1)', stroke: 'var(--hd-surface)', 'stroke-width': 1.5 }, node);
+  });
+  const marker = svg('circle', {
+    r: 6, fill: 'var(--hd-s1)', stroke: 'var(--hd-ink)', 'stroke-width': 2, visibility: 'hidden',
+  }, node);
+  frame.appendChild(node);
+
+  const tip = html('div', 'hd-tip', undefined, frame);
+  tip.hidden = true;
+  const order = points.map((_, i) => i).sort((a, b) => points[a].x - points[b].x);
+  let active = null;
+  const show = (index) => {
+    active = index;
+    const p = points[index];
+    marker.setAttribute('cx', x(p.x));
+    marker.setAttribute('cy', y(p.y));
+    marker.setAttribute('visibility', 'visible');
+    tip.replaceChildren();
+    html('div', 'hd-tip__date', longDate(p.date), tip);
+    tipRow(tip, 'var(--hd-s1)', 'Asleep at', clock(p.x));
+    tipRow(tip, 'var(--hd-s1)', spec.yName, spec.format(p.y));
+    tip.hidden = false;
+    const scale = node.getBoundingClientRect().width / width;
+    const px = x(p.x) * scale;
+    const left = px + 12 + tip.offsetWidth > frame.clientWidth ? px - tip.offsetWidth - 12 : px + 12;
+    tip.style.transform = `translate(${Math.max(0, left)}px, ${Math.max(0, y(p.y) * scale - tip.offsetHeight - 10)}px)`;
+  };
+  const hide = () => {
+    active = null;
+    tip.hidden = true;
+    marker.setAttribute('visibility', 'hidden');
+  };
+  const nearest = (event) => {
+    const rect = node.getBoundingClientRect();
+    const scale = width / rect.width;
+    const px = (event.clientX - rect.left) * scale;
+    const py = (event.clientY - rect.top) * scale;
+    let best = 0;
+    let bestDistance = Infinity;
+    points.forEach((p, i) => {
+      const distance = (x(p.x) - px) ** 2 + (y(p.y) - py) ** 2;
+      if (distance < bestDistance) { best = i; bestDistance = distance; }
+    });
+    return best;
+  };
+  node.addEventListener('pointermove', (event) => show(nearest(event)));
+  node.addEventListener('pointerdown', (event) => show(nearest(event)));
+  node.addEventListener('pointerleave', hide);
+  node.addEventListener('blur', hide);
+  node.addEventListener('keydown', (event) => {
+    const moves = { ArrowLeft: -1, ArrowRight: 1 };
+    if (event.key === 'Escape') hide();
+    if (!(event.key in moves)) return;
+    event.preventDefault();
+    const position = active === null ? order.length - 1 : order.indexOf(active) + moves[event.key];
+    show(order[Math.max(0, Math.min(order.length - 1, position))]);
+  });
+}
+
+function scatterFigure(grid, title, sub) {
+  const figure = html('figure', 'hd-chart', undefined, grid);
+  const caption = html('figcaption', '', undefined, figure);
+  infoButton(html('span', 'hd-chart__title', title, caption), title);
+  html('span', 'hd-chart__sub', sub, caption);
+  const list = html('ul', 'hd-legend', undefined, figure);
+  const night = html('li', '', undefined, list);
+  html('span', 'hd-swatch hd-swatch--dot', undefined, night);
+  night.append('One night');
+  const trend = html('li', '', undefined, list);
+  html('span', 'hd-key', undefined, trend).style.background = 'var(--hd-s2)';
+  trend.append('Trend');
+  return html('div', 'hd-frame', undefined, figure);
+}
+
+function renderBedtime(parent, effect) {
+  html('h4', 'hd-block-title', 'Bedtime and your sleep', parent);
+  const lines = bedtimeFindings(effect);
+  html('p', 'hd-block-sub', `From ${effect.nights.length} nights. ${lines.length ? 'These show what tends to go together, not proof of cause.' : 'No clear link between your bedtime and your sleep yet.'}`, parent);
+  if (lines.length) {
+    const list = html('ul', 'hd-findings', undefined, parent);
+    lines.forEach((line) => html('li', '', line, list));
+  }
+  const grid = html('div', 'hd-grid', undefined, parent);
+  const asleepFrame = scatterFigure(grid, 'Bedtime and time asleep', 'Hours asleep by the time you fell asleep');
+  const wakeFrame = scatterFigure(grid, 'Bedtime and wake time', 'Wake time by the time you fell asleep');
+  const line = (fit, toMinutes) => (fit ? (v) => (fit.intercept + fit.slope * (v / 60)) * (toMinutes ? 60 : 1) : null);
+  renderScatter(asleepFrame, {
+    label: 'Time asleep by bedtime, one dot per night',
+    points: effect.nights.map((n) => ({ date: n.date, x: n.bed, y: n.asleep })),
+    formatAxis: (v) => `${v}h`,
+    format: hours,
+    yName: 'Time asleep',
+    band: { low: 7, high: 9, label: 'Ideal: 7-9 h asleep' },
+    line: line(effect.asleep, false),
+  }, Math.max(260, Math.round(asleepFrame.clientWidth)));
+  renderScatter(wakeFrame, {
+    label: 'Wake time by bedtime, one dot per night',
+    points: effect.nights.map((n) => ({ date: n.date, x: n.bed, y: n.wake })),
+    formatAxis: clock,
+    format: clock,
+    yName: 'Woke at',
+    time: true,
+    line: line(effect.wake, true),
+  }, Math.max(260, Math.round(wakeFrame.clientWidth)));
+}
+
+function renderWeekend(parent, shift) {
+  html('h4', 'hd-block-title', 'Weeknights and weekends', parent);
+  html('p', 'hd-block-sub', 'Friday and Saturday nights compared with Sunday to Thursday nights. Researchers call a weekly shift of more than about an hour social jet lag, and link it with worse sleep and more daytime tiredness.', parent);
+  const grid = html('div', 'hd-weeks', undefined, parent);
+  const later = shift.shift >= 0;
+  const cards = [
+    {
+      label: 'Weekend shift',
+      value: Math.round(Math.abs(shift.shift)) < 1 ? 'No shift' : `${duration(shift.shift)} ${later ? 'later' : 'earlier'}`,
+      status: Math.abs(shift.shift) <= 60 ? '✓ On target' : '↘ More than 1 h',
+      reference: `Middle of sleep ${clock(shift.work.middle)} on weeknights, ${clock(shift.free.middle)} on weekends. Target under 1 h.`,
+    },
+    {
+      label: 'Weeknight sleep',
+      value: hours(shift.work.asleep),
+      reference: `Average of ${shift.work.count} nights, Sunday to Thursday`,
+    },
+    {
+      label: 'Weekend sleep',
+      value: hours(shift.free.asleep),
+      reference: `Average of ${shift.free.count} nights, Friday and Saturday`,
+    },
+  ];
+  cards.forEach((item) => {
+    const card = html('div', 'hd-week', undefined, grid);
+    infoButton(html('span', 'hd-tile__label', item.label, card), item.label);
+    html('span', 'hd-week__value', item.value, card);
+    if (item.status) html('span', 'hd-week__trend', item.status, card);
+    html('span', 'hd-tile__reference', item.reference, card);
+  });
+}
+
 function renderOverview(content, allDays) {
   const today = new Date().toLocaleDateString('en-CA');
   const days = completeDays(allDays, today);
   if (days.length === 0) return;
+  const heading = html('div', 'hd-section', undefined, content);
+  html('h3', 'hd-section__title', '5. Patterns and progress', heading);
+  html('p', 'hd-section__sub', 'Comparisons built from your own data. They get more reliable as more nights are recorded.', heading);
   const section = html('div', 'hd-overview', undefined, content);
-  const weeks = compareWeeks(days);
-  renderWeeks(section, weeks);
+  // Includes today, because last night is complete even though today is not.
+  const check = vitalsCheck(allDays);
+  if (check) renderVitals(section, check);
+  renderWeeks(section, compareWeeks(days));
+  const effect = bedtimeEffect(days);
+  if (effect) renderBedtime(section, effect);
+  const shift = weekendShift(days);
+  if (shift) renderWeekend(section, shift);
   renderLevers(section, findLevers(days), days.length);
   const rows = targetGrid(days);
   if (rows.length) renderGrid(section, rows, content.clientWidth);
