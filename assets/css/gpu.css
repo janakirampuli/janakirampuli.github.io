@@ -1,0 +1,161 @@
+/*
+  GPU diagrams (gpu-viz.js)
+  Loaded with transformer.css, which has the colors, buttons and panels.
+*/
+
+.ia-gpu-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.ia-gpu-slider[hidden] { display: none; }
+.ia-gpu-slider .ia-anim__label { margin: 0; white-space: nowrap; }
+.ia-gpu-slider input[type="range"] { flex: 1; min-width: 5rem; accent-color: var(--ia-accent); }
+.ia-gpu-out { font-size: 0.8rem; min-width: 3.2em; white-space: nowrap; }
+
+/* Math or memory */
+.ia-gpu-bars {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 7.5em;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  margin: 0.9rem 0 0.6rem;
+}
+
+.ia-gpu-bars .ia-anim__label { margin: 0; white-space: nowrap; }
+
+.ia-gpu-bar__track {
+  height: 14px;
+  border-radius: 2px;
+  background: var(--tf-cell);
+  overflow: hidden;
+}
+
+.ia-gpu-bar__fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 250ms ease;
+}
+
+.ia-gpu-bar__fill.is-mem { background: var(--tf-t1); }
+.ia-gpu-bar__fill.is-math { background: var(--tf-t0); }
+.ia-gpu-bar__value { font-size: 0.78rem; color: var(--ia-muted); }
+
+.ia-gpu-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.6rem;
+  margin-top: 0.4rem;
+}
+
+.ia-gpu-stat { display: grid; gap: 0.1rem; }
+.ia-gpu-stat .ia-anim__label { margin: 0; }
+.ia-gpu-stat b { font-size: 1.1rem; }
+
+/* Warp scheduler */
+.ia-gpu-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin: 0.5rem 0;
+  font-size: 0.78rem;
+  color: var(--ia-muted);
+}
+
+.ia-gpu-legend__item { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+.ia-gpu-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+}
+
+.ia-gpu-chart svg { display: block; width: 100%; height: auto; }
+
+.ia-gpu-axis {
+  font-family: var(--ia-font-sans);
+  font-size: 9px;
+  fill: var(--ia-muted);
+}
+
+.ia-gpu-axis.is-strong { fill: var(--tf-ink); font-weight: 600; }
+
+.ia-gpu-cell.is-math, .ia-gpu-swatch.is-math { fill: var(--tf-t0); background: var(--tf-t0); }
+.ia-gpu-cell.is-read, .ia-gpu-swatch.is-read { fill: var(--tf-t1); background: var(--tf-t1); }
+.ia-gpu-cell.is-wait, .ia-gpu-swatch.is-wait { fill: var(--tf-grid); background: var(--tf-grid); opacity: 0.35; }
+.ia-gpu-cell.is-ready, .ia-gpu-swatch.is-ready { fill: transparent; stroke: var(--tf-grid); stroke-width: 1; background: transparent; box-shadow: inset 0 0 0 1px var(--tf-grid); }
+.ia-gpu-cell.is-idle { fill: transparent; stroke: var(--tf-line); stroke-width: 1; }
+
+/* Processor */
+.ia-gpu-machine {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .ia-gpu-machine { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ia-gpu-machine__col { display: grid; gap: 4px; align-content: start; }
+.ia-gpu-machine__col > .ia-anim__label { margin: 0 0 0.2rem; }
+
+.ia-gpu-machine__prog {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ia-gpu-machine__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--tf-line);
+  border-radius: 3px;
+  font-size: 0.8rem;
+  white-space: pre;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.ia-gpu-machine__prog .ia-gpu-machine__row { justify-content: flex-start; }
+.ia-gpu-machine__idx { color: var(--ia-muted); min-width: 1em; }
+
+.ia-gpu-machine__row.is-on {
+  border-color: var(--ia-accent);
+  background: var(--ia-bg-soft);
+}
+
+.ia-gpu-machine__alu { min-height: 1.9em; }
+
+.ia-gpu-ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0.5rem 0 0.2rem;
+}
+
+.ia-gpu-ticks .ia-gpu-swatch { width: 12px; height: 12px; }
+.ia-gpu-swatch.is-fetch { background: var(--tf-t3); }
+.ia-gpu-swatch.is-store { background: var(--tf-t2); }
+.ia-gpu-swatch.is-empty { background: transparent; box-shadow: inset 0 0 0 1px var(--tf-line); }
+
+#main_content .ia-gpu-machine__prog li {
+  margin: 0;
+  font-family: var(--ia-font-mono);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.ia-gpu-ticks .ia-gpu-swatch.is-wait { opacity: 0.7; }
+
+
+/* Overview drawing */
+.ia-gpu-overview { display: block; width: 100%; height: auto; border-radius: 4px; }
+html.dark-mode .ia-gpu-overview { filter: invert(0.9) hue-rotate(180deg); }

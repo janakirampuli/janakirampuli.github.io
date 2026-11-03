@@ -3,3 +3,8 @@
   date: 2026-09-19
   description: "Notes, experiments and results from working through Stanford CS336."
   published: true
+- title: "Programming GPUs from scratch"
+  url: /projects/gpu-programming/
+  date: 2026-11-02
+  description: "How GPUs work, and CUDA and Triton kernels written from scratch."
+  published: true

@@ -1,0 +1,28 @@
+{%- comment -%}
+GPU diagrams. The code is in gpu-viz.js, and the styles are in transformer.css
+and gpu.css (add both to `extra_css` in the front matter).
+
+Usage:
+  {% include components/gpu.html diagram="machine" %}
+  {% include components/gpu.html diagram="intensity" mode="simple" %}
+  {% include components/gpu.html diagram="intensity" algo="1" math="1" level="0" n="256" %}
+  {% include components/gpu.html diagram="threads" threads="2" math="2" %}
+
+`diagram` is one of: machine, intensity, threads.
+Optional for intensity: `mode` ("simple" shows only an operations slider, with `ops`
+and `need`, the operations per number that the chip needs),
+`algo` (0 or 1), `math` (0 or 1), `level` (0 to 2) and `n` (matrix size).
+Optional for threads: `threads` (1 to 16) and `math` (1 to 8).
+{%- endcomment -%}
+<div class="ia-anim ia-tf ia-gpu ia-gpu--{{ include.diagram }}" data-gpu-{{ include.diagram }}
+  {%- if include.mode %} data-mode="{{ include.mode }}"{% endif -%}
+  {%- if include.ops %} data-ops="{{ include.ops }}"{% endif -%}
+  {%- if include.need %} data-need="{{ include.need }}"{% endif -%}
+  {%- if include.algo %} data-algo="{{ include.algo }}"{% endif -%}
+  {%- if include.math %} data-math="{{ include.math }}"{% endif -%}
+  {%- if include.level %} data-level="{{ include.level }}"{% endif -%}
+  {%- if include.n %} data-n="{{ include.n }}"{% endif -%}
+  {%- if include.threads %} data-threads="{{ include.threads }}"{% endif -%}
+>
+  <noscript>This diagram needs JavaScript.</noscript>
+</div>

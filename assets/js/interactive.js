@@ -402,3 +402,9 @@ if (document.querySelector('[data-tf-explorer]')) {
     console.error('Transformer explorer failed', e);
   });
 }
+
+if (document.querySelector('[data-gpu-machine], [data-gpu-intensity], [data-gpu-threads]')) {
+  import('./gpu-viz.js').catch((e) => {
+    console.error('GPU diagrams failed', e);
+  });
+}
