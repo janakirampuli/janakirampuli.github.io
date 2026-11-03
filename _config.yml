@@ -46,6 +46,10 @@ nav:
 
 show_downloads: false
 
+# Umami Cloud analytics (https://cloud.umami.is). Paste the website ID from
+# Settings > Websites. Leave empty to turn analytics off.
+umami_website_id: "50ea082a-828d-4ff9-97ab-3a5aedf66b74"
+
 repository: janakirampuli/janakirampuli.github.io
 
 # Build settings
