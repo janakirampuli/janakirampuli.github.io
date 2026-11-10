@@ -1,0 +1,29 @@
+# Facts about me in one place. llms.txt and the Person JSON-LD on the
+# home and about pages read from this file, so update it when things change.
+name: Janaki Ram Puli
+job_title: Software Engineer
+summary: >-
+  Software engineer at WarpBuild (YC S21), working on CI/CD infrastructure and
+  AI agents for software delivery. Previously at Oracle on MicroTx. B.Tech in
+  Computer Science from IIT Bombay. Writes about LLMs, GPUs and distributed systems.
+works_for:
+  name: WarpBuild
+  url: https://www.warpbuild.com/
+alumni_of:
+  name: Indian Institute of Technology Bombay
+  url: https://www.iitb.ac.in/
+knows_about:
+  - Large language models
+  - Transformers
+  - GPU programming
+  - CUDA
+  - Triton
+  - Distributed systems
+  - Workflow orchestration
+  - Distributed transactions
+  - CI/CD infrastructure
+  - AI agents
+# Profiles that belong to me. Add LinkedIn here once you want it listed.
+same_as:
+  - https://github.com/janakirampuli
+  - https://x.com/foo_7755

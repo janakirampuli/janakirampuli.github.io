@@ -2,6 +2,8 @@
 layout: default
 title: About
 permalink: /about/
+agent_markdown: true
+description: "Janaki Ram Puli: software engineer at WarpBuild (YC S21), previously at Oracle on MicroTx, B.Tech CSE from IIT Bombay."
 ---
 
 <div class="timeline" aria-label="Janaki Ram timeline">

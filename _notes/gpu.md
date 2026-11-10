@@ -1,6 +1,7 @@
 ---
 layout: notes
 title: "GPUs from first principles"
+description: "How a GPU works, built up from a single multiply-add: memory bandwidth and latency, threads, warps, SMs, blocks, shared memory and the levels of memory."
 date: 2026-11-02
 tags: ["gpu", "cuda", "hardware"]
 project: gpu-programming

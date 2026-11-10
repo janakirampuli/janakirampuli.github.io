@@ -1,6 +1,7 @@
 ---
 layout: notes
 title: "BPE Tokenizer"
+description: "How a byte-pair encoding (BPE) tokenizer is trained and used, from byte representation to the merge algorithm and ways to make training faster."
 date: 2026-10-4
 tags: ["llm", "tokenization", "bpe"]
 project: llm-from-scratch

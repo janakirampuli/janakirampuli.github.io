@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "Roll the dice"
+description: "Roll the Dice, a poem by Charles Bukowski."
 tags: ["poem"]
 author: "Charles Bukowski"
 date: 2025-04-17

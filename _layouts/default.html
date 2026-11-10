@@ -34,6 +34,13 @@
 
     <title>foo</title>
     {% seo title=false %}
+    {%- capture markdown_url -%}{% include markdown-url.html page=page %}{%- endcapture -%}
+    {%- if markdown_url != "" %}
+    <link rel="alternate" type="text/markdown" href="{{ markdown_url | absolute_url }}" title="Markdown version">
+    {%- endif %}
+    {%- if page.url == "/" or page.url == "/about/" %}
+    {% include person-jsonld.html %}
+    {%- endif %}
     {% include analytics.html %}
   </head>
 

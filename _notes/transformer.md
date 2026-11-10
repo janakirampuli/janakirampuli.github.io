@@ -1,6 +1,7 @@
 ---
 layout: notes
 title: "Transformer language model"
+description: "One sentence followed through a decoder-only transformer language model, from token ids to the probability of the next token."
 date: 2026-10-17
 tags: ["llm", "transformer", "attention"]
 project: llm-from-scratch

@@ -1,6 +1,7 @@
 ---
 layout: notes
 title: "Building an Auth Service"
+description: "Building an auth service on better-auth: user sessions, short-lived signed tokens for services, organizations and roles, OAuth, SSO, SCIM and API keys."
 date: 2026-07-25
 tags: ["auth", "backend", "systems"]
 published: true

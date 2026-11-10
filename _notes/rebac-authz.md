@@ -1,6 +1,7 @@
 ---
 layout: notes
 title: "Authorization with ReBAC"
+description: "Relationship-based access control (ReBAC) with Cedar: roles, hierarchy, policies, forbid rules, tenant boundaries, sharing and listing what a user can see."
 date: 2026-09-19
 tags: ["authz", "rebac", "cedar", "backend", "systems"]
 published: true

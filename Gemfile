@@ -33,3 +33,6 @@ gem "wdm", "~> 0.1", :platforms => [:mingw, :x64_mingw, :mswin]
 gem "http_parser.rb", "~> 0.6.0", :platforms => [:jruby]
 
 gem 'faraday-retry'
+
+# Used by _scripts/export-markdown.rb after the build to write Markdown copies of pages.
+gem "reverse_markdown", "~> 3.0"

@@ -35,6 +35,9 @@ jobs:
       - name: Build with Jekyll
         run: bundle exec jekyll build --destination _site
 
+      - name: Write Markdown copies and llms-full.txt for AI agents
+        run: bundle exec ruby _scripts/export-markdown.rb _site
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
 

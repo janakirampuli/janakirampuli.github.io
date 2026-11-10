@@ -1,6 +1,7 @@
 ---
 layout: post
 title: "A Mechanistic View of Thinking and the Brain"
+description: "How attention span, the two modes of thinking, chunking, neurotransmitters and procrastination work in the brain, and how they relate to the way LLMs think."
 date: 2026-03-15
 tags: ["learning", "thinking"]
 published: true

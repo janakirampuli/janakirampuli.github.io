@@ -1,0 +1,26 @@
+{%- comment -%}
+Prints the path of the Markdown copy of a page, or nothing if the page has none.
+Usage: {% include markdown-url.html page=page %}
+
+Blog posts, notes and pages with `agent_markdown: true` get a Markdown copy.
+_scripts/export-markdown.rb writes the copies after the Jekyll build, using the
+<link rel="alternate" type="text/markdown"> tag that default.html prints from this.
+/notes/rope.html -> /notes/rope.md, /_posts/dice -> /_posts/dice.md,
+/about/ -> /about/index.md. Pages without a title (drafts in _posts/) get none.
+{%- endcomment -%}
+{%- assign p = include.page -%}
+{%- assign has_markdown = false -%}
+{%- if p.collection == "notes" or p.collection == "posts" or p.dir == "/_posts/" -%}
+  {%- if p.title -%}{%- assign has_markdown = true -%}{%- endif -%}
+{%- endif -%}
+{%- if p.agent_markdown -%}{%- assign has_markdown = true -%}{%- endif -%}
+{%- if has_markdown -%}
+  {%- assign last_char = p.url | slice: -1 -%}
+  {%- if last_char == "/" -%}
+    {{- p.url | append: "index.md" -}}
+  {%- elsif p.url contains ".html" -%}
+    {{- p.url | replace: ".html", ".md" -}}
+  {%- else -%}
+    {{- p.url | append: ".md" -}}
+  {%- endif -%}
+{%- endif -%}

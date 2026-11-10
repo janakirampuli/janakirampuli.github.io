@@ -1,6 +1,7 @@
 ---
 layout: notes
 title: "Neural networks 101"
+description: "The parts of training a neural network: activation functions, weight initialization, loss, gradients, optimizers, learning rate schedules, gradient clipping and text generation."
 date: 2026-10-20
 tags: ["llm", "training", "optimization"]
 project: llm-from-scratch

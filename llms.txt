@@ -1,0 +1,52 @@
+---
+layout: null
+permalink: /llms.txt
+sitemap: false
+---
+{%- comment -%}
+An index of the site for AI agents and LLMs, following https://llmstxt.org.
+_scripts/export-markdown.rb reads the built file and writes /llms-full.txt from
+the Markdown links in it, in the same order.
+{%- endcomment -%}
+{%- assign profile = site.data.profile -%}
+{%- comment -%} Same list as the blog index: posts plus pages that live in _posts/. {%- endcomment -%}
+{%- assign legacy_posts = site.pages | where_exp: "p", "p.dir == '/_posts/'" -%}
+{%- assign posts = site.posts | concat: legacy_posts | where_exp: "p", "p.published != false" | where_exp: "p", "p.title" | sort: "date" | reverse -%}
+{%- assign notes = site.notes | where_exp: "n", "n.published != false" | sort: "date" | reverse -%}
+{%- assign about = site.pages | where: "url", "/about/" | first -%}
+{%- assign resume = site.pages | where: "url", "/resume/" | first -%}
+# {{ profile.name }}
+
+> {{ profile.summary }}
+
+This is the personal site of {{ profile.name }}, {{ profile.job_title | downcase }} at [{{ profile.works_for.name }}]({{ profile.works_for.url }}). The blog has posts on learning and thinking, and the notes explain topics from first principles: GPUs, transformers, tokenizers, training, auth and authorization. Every page below is linked as plain Markdown. The HTML version of each page is at the same path, ending in `.html` (or `/` for About and Resume).
+
+- Website: {{ "/" | absolute_url }}
+- GitHub: https://github.com/{{ site.github_username }}
+- X: https://x.com/{{ site.twitter_username }}
+- Email: {{ site.email }}
+- Resume PDF: {{ "/assets/files/Janaki_Resume.pdf" | absolute_url }}
+
+## About
+
+{% capture md %}{% include markdown-url.html page=about %}{% endcapture -%}
+- [About]({{ md | absolute_url }}): {{ about.description }}
+{% capture md %}{% include markdown-url.html page=resume %}{% endcapture -%}
+- [Resume]({{ md | absolute_url }}): {{ resume.description }}
+
+## Notes
+
+{% for n in notes -%}
+{% capture md %}{% include markdown-url.html page=n %}{% endcapture -%}
+- [{{ n.title }}]({{ md | absolute_url }}): {{ n.date | date: "%Y-%m-%d" }}. {{ n.description }}
+{% endfor %}
+## Blog
+
+{% for p in posts -%}
+{% capture md %}{% include markdown-url.html page=p %}{% endcapture -%}
+- [{{ p.title }}]({{ md | absolute_url }}): {{ p.date | date: "%Y-%m-%d" }}. {{ p.description }}
+{% endfor %}
+## Optional
+
+- [Full text of every page above]({{ "/llms-full.txt" | absolute_url }})
+- [Sitemap]({{ "/sitemap.xml" | absolute_url }})

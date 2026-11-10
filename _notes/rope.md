@@ -1,6 +1,7 @@
 ---
 layout: notes
 title: "RoPE"
+description: "How rotary position embedding (RoPE) tells a transformer where each token is by rotating its vectors by an angle that depends on position."
 date: 2026-10-12
 tags: ["llm", "rope", "position"]
 project: llm-from-scratch
