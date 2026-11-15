@@ -43,6 +43,14 @@ function html(name, className, text, parent) {
   return node;
 }
 
+// A section title with an id, so the page's section rail can link to it.
+function sectionTitle(text, parent) {
+  const node = html('h3', 'hd-section__title', text, parent);
+  node.id = text.replace(/^\d+\.\s*/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  node.dataset.rail = '';
+  return node;
+}
+
 let popover = null;
 let popoverOwner = null;
 let pinned = false;
@@ -1279,7 +1287,7 @@ function renderOverview(content, allDays) {
   const days = completeDays(allDays, today);
   if (days.length === 0) return;
   const heading = html('div', 'hd-section', undefined, content);
-  html('h3', 'hd-section__title', '5. Patterns and progress', heading);
+  sectionTitle('5. Patterns and progress', heading);
   html('p', 'hd-section__sub', 'Comparisons built from your own data. They get more reliable as more nights are recorded.', heading);
   const section = html('div', 'hd-overview', undefined, content);
   // Includes today, because last night is complete even though today is not.
@@ -1301,7 +1309,7 @@ function render(content, days) {
 
   SECTIONS.forEach((section) => {
     const heading = html('div', 'hd-section', undefined, content);
-    html('h3', 'hd-section__title', section.title, heading);
+    sectionTitle(section.title, heading);
     html('p', 'hd-section__sub', section.sub, heading);
     const grid = html('div', 'hd-grid', undefined, content);
     // Drawn after every card exists, because the grid sets each card's final width.
@@ -1312,6 +1320,7 @@ function render(content, days) {
 
   renderOverview(content, days);
   renderTiles(content, days);
+  document.dispatchEvent(new Event('section-rail:refresh'));
 }
 
 async function main() {

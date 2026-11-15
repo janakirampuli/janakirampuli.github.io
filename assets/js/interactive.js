@@ -368,6 +368,101 @@ function enhanceBackToTop() {
 
 enhanceBackToTop();
 
+/* ---------------------------------
+ * Section rail
+ * ---------------------------------
+   A fixed column of dashes on the left, one for each h2 in the article.
+   Hovering it shows the section names, and clicking one scrolls there.
+   Only built when #main_content has data-section-rail (set by the layout).
+
+   Other headings join the rail when they have an id and a data-rail
+   attribute. Pages that draw their content with JavaScript dispatch a
+   "section-rail:refresh" event on document after drawing it.
+*/
+function enhanceSectionRail() {
+  const article = document.querySelector('#main_content[data-section-rail]');
+  if (!article) return;
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let nav = null;
+  let headings = [];
+  let links = [];
+  let current = -1;
+
+  function build() {
+    headings = Array.from(article.querySelectorAll('h2[id], [data-rail][id]')).filter(
+      (h) => h.id !== 'contents' && !h.closest('.ia-toc')
+    );
+    current = -1;
+    if (headings.length < 3) {
+      nav?.remove();
+      nav = null;
+      links = [];
+      return;
+    }
+
+    links = headings.map((h) =>
+      el('a', { class: 'section-rail__link', href: '#' + h.id }, [
+        el('span', { class: 'section-rail__dash', 'aria-hidden': 'true' }),
+        el('span', { class: 'section-rail__label' }, h.textContent.trim()),
+      ])
+    );
+    const list = el('ul', {}, links.map((a) => el('li', {}, [a])));
+    if (nav) {
+      nav.replaceChildren(list);
+    } else {
+      nav = el('nav', { id: 'section-rail', class: 'section-rail', 'aria-label': 'Sections' }, [list]);
+      nav.addEventListener('click', onClick);
+      document.body.appendChild(nav);
+    }
+    syncActive();
+  }
+
+  // Looks the heading up at click time, so it still works after a page redraws its content.
+  function onClick(e) {
+    const a = e.target.closest('a.section-rail__link');
+    if (!a) return;
+    const id = a.getAttribute('href').slice(1);
+    const target = document.getElementById(id);
+    if (!target) return;
+    e.preventDefault();
+    target.scrollIntoView({ behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+    history.replaceState(null, '', '#' + id);
+  }
+
+  // The current section is the last heading above 30% of the viewport height.
+  function syncActive() {
+    if (!nav) return;
+    const line = window.innerHeight * 0.3;
+    let idx = -1;
+    for (let i = 0; i < headings.length; i++) {
+      if (headings[i].getBoundingClientRect().top <= line) idx = i;
+      else break;
+    }
+    if (idx === current) return;
+    if (current >= 0) links[current].removeAttribute('aria-current');
+    if (idx >= 0) links[idx].setAttribute('aria-current', 'location');
+    current = idx;
+  }
+
+  let queued = false;
+  function onScroll() {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      syncActive();
+    });
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  document.addEventListener('section-rail:refresh', build);
+  build();
+}
+
+enhanceSectionRail();
+
 /* -----------------------------
  * Tokenizer diagrams
  * -----------------------------

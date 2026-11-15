@@ -113,7 +113,7 @@
     </header>
 
     <div class="container">
-      <section id="main_content"{% if page.code_copy == false %} class="no-copy"{% endif %}>
+      <section id="main_content"{% if page.code_copy == false %} class="no-copy"{% endif %}{% if page.section_rail == true %} data-section-rail{% elsif page.layout == 'post' or page.layout == 'notes' %}{% unless page.section_rail == false %} data-section-rail{% endunless %}{% endif %}>
         {{ content }}
       </section>
     </div>

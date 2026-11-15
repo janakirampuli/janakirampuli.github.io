@@ -3,6 +3,7 @@ layout: default
 title: Resume
 permalink: /resume/
 agent_markdown: true
+section_rail: true
 description: "Resume of Janaki Ram Puli: work at WarpBuild and Oracle, projects in LLMs, GPUs and computer vision, JEE Advanced AIR 199, and patents on agentic workflows."
 ---
 

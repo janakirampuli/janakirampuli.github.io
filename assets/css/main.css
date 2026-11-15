@@ -439,6 +439,153 @@ body {
     }
   }
 
+  /* --------------------
+   * Section rail: dashes on the left of posts and notes, one per h2.
+   * Hovering shows the section names. Built by interactive.js.
+   * The id selectors beat the theme's link and list styles.
+   * -------------------- */
+  #section-rail {
+    --rail-text: #1c1917;
+    --rail-muted: rgba(28, 25, 23, 0.4);
+    --rail-bg: rgba(245, 240, 232, 0.97);
+    --rail-border: rgba(100, 80, 65, 0.25);
+    --rail-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+
+    position: fixed;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1050;
+    display: none;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  html.dark-mode #section-rail {
+    --rail-text: rgba(255, 255, 255, 0.92);
+    --rail-muted: rgba(255, 255, 255, 0.35);
+    --rail-bg: rgba(20, 20, 20, 0.95);
+    --rail-border: rgba(255, 255, 255, 0.18);
+    --rail-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Only where there is room in the left gutter and a mouse to hover with. */
+  @media (min-width: 1100px) and (hover: hover) and (pointer: fine) {
+    #section-rail {
+      display: block;
+    }
+  }
+
+  #section-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  #section-rail:hover,
+  #section-rail:focus-within {
+    background: var(--rail-bg);
+    border-color: var(--rail-border);
+    box-shadow: var(--rail-shadow);
+  }
+
+  #section-rail ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  #section-rail li {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    line-height: 1;
+  }
+
+  #section-rail a {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 10px;
+    color: var(--rail-muted);
+    text-decoration: none;
+    text-shadow: none;
+    transition: height 160ms ease, gap 160ms ease, color 120ms ease;
+  }
+
+  #section-rail .section-rail__dash {
+    flex: none;
+    width: 12px;
+    height: 2px;
+    margin-right: 8px;
+    border-radius: 1px;
+    background: currentColor;
+    transition: width 160ms ease, margin-right 160ms ease;
+  }
+
+  /* Labels take no width while the rail is closed, so the rail stays narrow. */
+  #section-rail .section-rail__label {
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--ia-font-sans, system-ui, sans-serif);
+    font-size: 13px;
+    line-height: 1.3;
+    transition: max-width 160ms ease, opacity 120ms ease;
+  }
+
+  #section-rail:hover a,
+  #section-rail:focus-within a {
+    height: 26px;
+    gap: 4px;
+  }
+
+  #section-rail:hover .section-rail__label,
+  #section-rail:focus-within .section-rail__label {
+    max-width: 280px;
+    opacity: 1;
+  }
+
+  #section-rail a:hover,
+  #section-rail a:focus-visible {
+    color: var(--rail-text);
+  }
+
+  #section-rail a:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+  }
+
+  #section-rail a[aria-current] {
+    color: var(--accent-color);
+  }
+
+  #section-rail a[aria-current] .section-rail__dash {
+    width: 20px;
+    margin-right: 0;
+  }
+
+  /* Leave a little space above a heading after jumping to it. */
+  #main_content h2[id],
+  #main_content [data-rail][id] {
+    scroll-margin-top: 1.5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #section-rail,
+    #section-rail a,
+    #section-rail .section-rail__dash,
+    #section-rail .section-rail__label {
+      transition: none;
+    }
+  }
+
   .img-center {
     display: block;
     margin-left: auto;
