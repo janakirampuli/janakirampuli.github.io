@@ -1,0 +1,16 @@
+{%- comment -%}
+Pages, posts and notes for the Cmd+K command palette (assets/js/shortcuts.js).
+Posts are gathered the same way as in _layouts/blog-index.html.
+{%- endcomment -%}
+{%- assign palette_posts = site.posts | where_exp: "post", "post.published != false" -%}
+{%- assign palette_legacy = site.pages | where_exp: "p", "p.dir == '/_posts/'" | where_exp: "p", "p.published != false" -%}
+{%- assign palette_posts = palette_posts | concat: palette_legacy | sort: "date" | reverse -%}
+{%- assign palette_notes = site.notes | where_exp: "note", "note.published != false" | sort: "date" | reverse -%}
+<script type="application/json" id="palette-data">
+{"pages":[{"title":"Home","url":{{ '/' | relative_url | jsonify }}}
+{%- for item in site.nav -%},{"title":{{ item.title | jsonify }},"url":{{ item.url | relative_url | jsonify }}}{%- endfor -%}],
+"blog":[
+{%- for post in palette_posts -%}{"title":{{ post.title | jsonify }},"url":{{ post.url | relative_url | jsonify }}}{% unless forloop.last %},{% endunless %}{%- endfor -%}],
+"notes":[
+{%- for note in palette_notes -%}{"title":{{ note.title | jsonify }},"url":{{ note.url | relative_url | jsonify }}}{% unless forloop.last %},{% endunless %}{%- endfor -%}]}
+</script>

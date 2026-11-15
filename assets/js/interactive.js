@@ -464,6 +464,13 @@ function enhanceSectionRail() {
 enhanceSectionRail();
 
 /* -----------------------------
+ * Keyboard shortcuts (Option+T, Cmd+K)
+ * ----------------------------- */
+import('./shortcuts.js').catch((e) => {
+  console.error('Keyboard shortcuts failed', e);
+});
+
+/* -----------------------------
  * Tokenizer diagrams
  * -----------------------------
    The code is in its own file. It loads only on pages that use a diagram.
