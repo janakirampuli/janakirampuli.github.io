@@ -621,6 +621,8 @@ const SECTIONS = [
           { key: 'deep', label: 'Deep', color: s1 },
           { key: 'core', label: 'Core', color: s2 },
           { key: 'rem', label: 'REM', color: s3 },
+          // Sleep added by hand in the Health app, such as a nap, has no stage.
+          { key: 'unspecified', label: 'No stage', color: raw },
           { key: 'awake', label: 'Awake', color: s4 },
         ],
       },

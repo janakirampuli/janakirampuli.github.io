@@ -78,7 +78,7 @@ const INFO = {
     help: 'Start with a steady wake time, including on weekends.',
   },
   'Sleep stages': {
-    what: 'How each night divides into deep, core and REM sleep, plus time awake. Stages are estimates from the watch, not a sleep lab.',
+    what: 'How each night divides into deep, core and REM sleep, plus time awake. Naps added by hand have no stage. Stages are estimates from the watch, not a sleep lab.',
     ideal: 'Rough guide: deep 1-2 h, REM 1.5-2 h, awake under 30 min.',
     help: 'Look for a pattern over many nights instead of reacting to one.',
   },
@@ -92,6 +92,10 @@ const INFO = {
   REM: rem,
   'REM sleep': rem,
   Core: core,
+  'No stage': {
+    what: 'Sleep with no stage, such as a nap you add by hand in the Health app. It counts toward time asleep.',
+    ideal: 'No fixed target.',
+  },
   Awake: awake,
   'Awake at night': awake,
   'Heart rate during sleep': sleepHr,
