@@ -25,6 +25,7 @@ extra_css:
 - [Kernel 1: one thread for each element](#kernel-1-one-thread-for-each-element)
 - [Kernel 2: reading neighboring numbers](#kernel-2-reading-neighboring-numbers)
 - [Kernel 3: shared memory](#kernel-3-shared-memory)
+- [Kernel 4](#kernel-4)
 - [Results](#results)
 
 </div>
@@ -386,6 +387,10 @@ BAR.SYNC.DEFER_BLOCKING 0x0
 | Measured | 5.32 TFLOPS |
 
 Shared memory loads set the lowest limit, so the next kernel has to do more `FFMA`s for each number that it loads from shared memory.
+
+## Kernel 4
+
+WIP.
 
 ## Results
 
