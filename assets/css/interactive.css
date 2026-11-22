@@ -66,6 +66,11 @@ html.dark-mode {
   font-size: 1.02rem;
 }
 
+#main_content .ia-sidenote__body {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
 /* Small-caps styling for labels (callout kinds, statement kinds) */
 .ia-label-caps {
   font-family: var(--ia-font-sans);
