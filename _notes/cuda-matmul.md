@@ -23,7 +23,7 @@ This work log is completely inspired by [Simon Boehm's blog](https://siboehm.com
 - [From CUDA to machine instructions](#from-cuda-to-machine-instructions)
 - [B200](#b200)
 - [Matrix multiplication](#matrix-multiplication)
-- [The cuBLAS reference](#the-cublas-reference)
+- [cuBLAS reference](#cublas-reference)
 - [Kernel 1: one thread for each element](#kernel-1-one-thread-for-each-element)
 - [Kernel 2: reading neighboring numbers](#kernel-2-reading-neighboring-numbers)
 - [Kernel 3: shared memory](#kernel-3-shared-memory)
@@ -97,6 +97,8 @@ NVIDIA's compiler `nvcc` turns a kernel into machine instructions in two steps:
 1. First, it writes the kernel in PTX, which is an instruction set that NVIDIA keeps the same across GPU generations.
 2. Second, it turns the PTX into SASS, which is the machine instruction set of one GPU generation. The flag `-arch` picks the generation, e.g., `-arch=sm_100` for the B200.
 
+The program file holds the SASS for the generations that it was compiled for, and it can also hold the PTX. On a newer GPU with no matching SASS, the driver turns the PTX into SASS when the program starts, so an old program still runs on a new GPU. The flag `--ptxas-options=-v` makes `nvcc` print how many registers each kernel uses.
+
 Here is the SASS of the `saxpy` kernel for the B200 (`-arch=sm_100`), from `cuobjdump -sass`, with two setup instructions left out:
 
 ```
@@ -153,7 +155,7 @@ The size in this note is M = N = K = 4096. `C` has 4096 × 4096 elements, and ea
 
 Each matrix holds about 16.8 million numbers, which take about 67 MB. If the B200 read each number of the three matrices from HBM only once, the reads would take about 0.026 ms, and the math would take about 70 times longer than the reads. A matrix multiply of this size can therefore keep the FP32 cores busy, as long as it reads each number from HBM a few times and [uses it many times]({{ '/notes/gpu.html#reusing-numbers' | relative_url }}).
 
-## The cuBLAS reference
+## cuBLAS reference
 
 cuBLAS is NVIDIA's library for matrix math. Its function `cublasSgemm` multiplies two matrices of 32-bit numbers. It took 2.16 ms, which is 63.60 TFLOPS and 85.4% of the B200's FP32 speed.
 
@@ -185,6 +187,8 @@ sgemm_1<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);
 
 Each block has 32 by 32 threads, and `ceil_div` divides and rounds up, so the grid has a thread for every element of `C`. Each thread keeps its running sum in a register and writes to `C` only once at the end.
 
+4096 is a multiple of 32, so every thread of the grid has an element to compute. With M = 4100, the grid would need one more row of blocks for the last 4 rows of `C`, and 28 of the 32 rows of threads in those blocks would have nothing to do. Work lost at the edges of the grid like this is called tile quantization, and it grows with the size of the tile.
+
 | Block | Time (ms) | TFLOPS | % of cuBLAS |
 |---|---|---|---|
 | 8 × 8 | 66.66 | 2.06 | 3.2% |
@@ -195,7 +199,7 @@ Kernel 1 is 31 to 114 times slower than cuBLAS. The reason is the way its warps 
 
 [![The threads of a 16 by 16 block, where each warp is 2 rows, and of a 32 by 32 block, where each warp is 1 row]({{ '/assets/images/cuda-warps.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/cuda-warps.svg' | relative_url }})
 
-The threads of a warp read memory together. The memory system moves data in pieces of 32 bytes, called sectors, so a read of one 4-byte number still moves 32 bytes. When several threads of a warp read numbers in the same sector, the GPU moves that sector only once for all of them.
+The threads of a warp [read memory together]({{ '/notes/gpu.html#reading-memory-as-a-warp' | relative_url }}). The memory system moves data in pieces of 32 bytes, called sectors, so a read of one 4-byte number still moves 32 bytes. When several threads of a warp read numbers in the same sector, the GPU moves that sector only once for all of them.
 
 In a 32 by 32 block, the 32 threads of a warp have `threadIdx.x` from 0 to 31 and the same `threadIdx.y`. Kernel 1 takes the row of `C` from x, so the warp works on 32 rows of `C` in one column. At each step `k` of the loop, the 32 threads read `A[i][k]` from 32 different rows of `A`. A row of `A` holds 4,096 numbers, which is 16 KB, so each of the 32 numbers is in its own sector. The warp moves 32 sectors to use 4 bytes from each of them. All 32 threads read the same `B[k][j]`, which is one more sector, so the warp moves 33 sectors at each step.
 
@@ -276,7 +280,7 @@ Kernel 3 took 13.32 ms, which is 10.32 TFLOPS and 1.46 times faster than kernel 
 
 ### How much of an SM a block uses
 
-Each block has 1,024 threads and keeps two 32 by 32 tiles in shared memory, which take 8 KB. An SM holds at most 2,048 threads, so it runs 2 blocks at a time and uses 16 KB of its 228 KB of shared memory.
+Each block has 1,024 threads and keeps two 32 by 32 tiles in shared memory, which take 8 KB. An SM holds at most 2,048 threads, so it runs 2 blocks at a time and uses 16 KB of its 228 KB of shared memory. The 2 blocks fill all 64 warp places of the SM, so the [occupancy]({{ '/notes/gpu.html#blocks-and-shared-memory' | relative_url }}) is 100%.
 
 The tile can't get bigger while each thread computes one element of `C`, because a block can have at most 1,024 threads, and a 32 by 32 tile already needs all of them.
 
@@ -1078,6 +1082,8 @@ BRA.U UP0, `(.L_x_1)
 
 </details>
 
+The listing has no loops over `m`, `n` or `k`, because the compiler unrolls them. It writes out every pass of each loop as separate instructions. `reg_A`, `reg_B` and `results` can only live in registers because of the unrolling. A register has a fixed name in the instruction, so the code can't pick one with an index that changes while the program runs. Unrolling also lets the compiler start loads early. The `LDS.128` of `s_B` for the third `k` comes in the middle of the `FFMA`s for the first two, so the warp has [independent work]({{ '/notes/gpu.html#switching-between-threads' | relative_url }}) while that load is on the way.
+
 Shared memory still takes longer than the FP32 cores, but the gap is smaller than in kernel 4. Nsight Compute shows the pipe that runs the `FFMA`s busy 37% of the time and shared memory 74%. The most common reasons why a warp waits are its numbers from global memory, its numbers from shared memory and `__syncthreads()`, in that order. With BK = 4, a warp does only 64 `FFMA`s at each step between two of these waits.
 
 ## Kernel 6: vectorized loads
@@ -1254,12 +1260,30 @@ FFMA R44, R12.reuse, R21, R44
 
 Kernel 7 took 3.07 ms, which is 44.80 TFLOPS and 1.13 times faster than kernel 6. Of the same 52 sizes, a 64 by 256 tile with 8 by 4 squares and BK = 32 ran fastest. With kernel 6's size, 128 by 128 and BK = 32, it took 3.32 ms.
 
+### Shared memory banks
+
+The stores into `s_A` in kernel 7 run slower than they could, because of how shared memory is built. Shared memory is split into 32 banks, and in each pass, each bank gives out or takes in one 4-byte number. Number `i` of shared memory sits in bank `i % 32`. A warp that reads 32 neighboring numbers therefore uses each bank once, and it gets them all in one pass.
+
+When threads of one warp use different numbers in the same bank, the bank serves them one after another, in extra passes. Such an access is called a bank conflict. Threads that read the same number don't conflict, because the bank sends that number to all of them at once.
+
+A row of `s_A` holds 64 numbers, which is two rounds of the 32 banks, so all the numbers in one column of `s_A` sit in the same bank. The 8 threads that copy one row of `A` store into one column of `s_A`, at 8 different rows. All 8 stores go to the same bank, so they take 8 passes.
+
+[![Banks of shared memory. A warp that reads 32 neighboring numbers uses each of the 32 banks once and takes 1 pass. In kernel 7, threads 0 to 7 store into column 0 of rows 0, 4, 8 and so on up to 28 of s_A. A row of s_A holds 64 numbers, so column 0 is in bank 0 in every row, and the 8 stores take 8 passes]({{ '/assets/images/kernel7-banks.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel7-banks.svg' | relative_url }})
+
+### Swizzling
+
+A common fix for a bank conflict is swizzling. Each row of shared memory keeps the same numbers, but in a different order, and the order changes from row to row. The numbers of one column of the matrix then land in different banks, while a row still uses each bank once.
+
+[![Swizzling on a small shared memory with 8 banks, holding an 8 by 8 matrix row by row. Each column of the matrix has its own color. In the plain layout, each column sits in one bank, so reading a column takes 8 passes. In the swizzled layout, each row holds the same numbers in a different order, and every column has one number in each bank, so reading a column takes 1 pass]({{ '/assets/images/smem-swizzle.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/smem-swizzle.svg' | relative_url }})
+
+Kernel 7 keeps the plain layout. Its stores into `s_A` happen once for each tile, while its loads from shared memory happen at every `k`, so the conflict in the stores costs little.
+
 ### What changed
 
 - At each `k`, a thread reads its numbers of `A` with 2 vector loads instead of 8 single loads. The kernel runs a third as many loads from shared memory, and shared memory does a third less work for them.
 - The pipe that runs the `FFMA`s is busy 62% of the time, up from 55%, and the shared memory pipe 73%, down from 83%.
 - The most common reason why a warp waits is still that the SM picks another warp first. The queue of instructions for shared memory is full less often, but warps now wait longer for the numbers of each load from shared memory.
-- The 8 threads that copy the same row of `A` write into the same bank of shared memory, so the stores into `s_A` take about 3 times as many passes. Stores are rare next to loads, so the cost is small.
+- Only the stores into `s_A` have the bank conflict, and the stores into `s_B` still take one pass each. All the stores into shared memory together take about 3 times as many passes as in kernel 6. Stores are rare next to loads, so the cost is small.
 - Each thread still needs 64 registers, so 2 blocks of 512 threads fit on an SM, as in kernel 6.
 
 ## Kernel 8: double buffering
@@ -1360,7 +1384,7 @@ In kernel 7, 8 by 8 squares were slower than 8 by 4, at 3.23 ms at best. Bigger 
 
 In kernel 8, each thread computes 8 by 8 elements, so the kernel runs a third fewer loads from shared memory than kernel 7. Shared memory still works more passes for those loads, though.
 
-The problem is where a thread's 8 columns sit. In kernel 8 they sit next to each other, so thread 0 reads columns 0 to 7 of `s_B`, and thread 1 reads columns 8 to 15. Neighboring threads then read 32 bytes apart, so several of them hit the same bank, and shared memory needs extra passes for each load.{% include components/sidenote.html id="sn-bank" label="3" text="Shared memory is split into 32 banks, and each bank gives out one 4-byte number per cycle. Number `i` of shared memory sits in bank `i % 32`, so 32 numbers in a row fill each bank once. When threads of one warp load different numbers from the same bank, the bank gives them out one after another, in extra passes. Such a load is called a bank conflict. Threads that load the same number don't conflict, because the bank sends it to all of them at once. In kernel 8, thread 0 loads numbers 0 to 3 of a row of `s_B`, which sit in banks 0 to 3, and thread 4 loads numbers 32 to 35, which sit in banks 0 to 3 as well." %}
+The problem is where a thread's 8 columns sit. In kernel 8 they sit next to each other, so thread 0 reads columns 0 to 7 of `s_B`, and thread 1 reads columns 8 to 15. Neighboring threads then read 32 bytes apart, so several of them hit the [same bank](#shared-memory-banks), and shared memory needs extra passes for each load. For example, thread 0 loads numbers 0 to 3 of a row of `s_B`, which sit in banks 0 to 3, and thread 4 loads numbers 32 to 35, which sit in banks 0 to 3 as well.
 
 Warp tiling keeps the 8 by 8 elements for each thread but spreads them out, so that neighboring threads read neighboring numbers. The name comes from choosing the layout for a whole warp at once, because the 32 threads of a warp load together:
 

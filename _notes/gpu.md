@@ -1,7 +1,7 @@
 ---
 layout: notes
 title: "GPUs from first principles"
-description: "How a GPU works, built up from a single multiply-add: memory bandwidth and latency, threads, warps, SMs, blocks, shared memory and the levels of memory."
+description: "How a GPU works, built up from a single multiply-add: memory bandwidth and latency, threads, warps, coalesced reads, SMs, blocks, occupancy and waves, clusters, shared memory and the levels of memory."
 date: 2026-11-02
 tags: ["gpu", "cuda", "hardware"]
 project: gpu-programming
@@ -19,8 +19,8 @@ extra_css:
 - [Computing y = a·x + y](#computing-y--ax--y)
 - [Memory](#memory)
 - [Instructions and registers](#instructions-and-registers)
-- [The processor](#the-processor)
-- [The clock](#the-clock)
+- [Processor](#processor)
+- [Clock](#clock)
 - [Long lists](#long-lists)
 - [Math speed](#math-speed)
 - [Memory bandwidth](#memory-bandwidth)
@@ -29,10 +29,13 @@ extra_css:
 - [A chip built for throughput](#a-chip-built-for-throughput)
 - [Switching between threads](#switching-between-threads)
 - [Warps](#warps)
+- [Reading memory as a warp](#reading-memory-as-a-warp)
 - [SMs](#sms)
 - [Blocks and shared memory](#blocks-and-shared-memory)
 - [Levels of memory](#levels-of-memory)
 - [Reusing numbers](#reusing-numbers)
+- [TMA](#tma)
+- [Clusters](#clusters)
 - [Overview](#overview)
 - [Further reading](#further-reading)
 
@@ -71,7 +74,7 @@ The copies are needed for two reasons. First, main memory is on separate chips, 
 
 The instructions are also stored in memory as numbers, next to the data.{% include components/sidenote.html id="sn-stored" label="1" text="Keeping the program in the same memory as the data is the idea of the stored program computer, from the [First Draft of a Report on the EDVAC](https://en.wikipedia.org/wiki/First_Draft_of_a_Report_on_the_EDVAC) (von Neumann, 1945). A machine can then load a new program the same way that it loads new data, instead of being rewired for each task." %} The set of instructions that a machine understands is called its instruction set, and each kind of chip has its own.
 
-## The processor
+## Processor
 
 The circuit that runs a program is called a processor. It keeps the address of the next instruction in a register called the program counter. The processor then repeats three steps for each instruction:
 
@@ -81,7 +84,7 @@ The circuit that runs a program is called a processor. It keeps the address of t
 
 The math unit is the part of the processor that does the arithmetic. After each instruction, the program counter moves on to the next one.{% include components/sidenote.html id="sn-adder" label="2" text="A math unit is built from transistors, which are tiny switches. An [adder](https://en.wikipedia.org/wiki/Adder_(electronics)) for two 32-bit numbers needs only a few thousand of them, and a large modern chip has about 80 billion. A chip has room for a very large number of math units." %}
 
-## The clock
+## Clock
 
 The circuits of a processor work in steps, in time with a clock. The clock is a signal that switches between 0 and 1 at a steady rate. Each time it switches to 1, the registers take in new values, and the signals then flow from the registers through the circuits until they settle.
 
@@ -162,9 +165,9 @@ A throughput chip can follow two rules:
 
 A GPU is a chip built with both rules. The rest of this note uses the NVIDIA H100 GPU as the example.
 
-The H100 has 16,896 math units for 32-bit numbers, and NVIDIA calls them FP32 cores. Each one does a multiplication and an addition on every tick, and the chip runs at 1.98 billion ticks per second. The H100 does about 67 trillion operations per second, which is about 9 times the EPYC 9654.
+The H100 has 16,896 math units for 32-bit numbers, and NVIDIA calls them FP32 cores. Each one does a multiplication and an addition on every tick, and the chip runs at 1.98 billion ticks per second. The H100 does about 67 trillion operations per second, which is about 9 times the EPYC 9654.{% include components/sidenote.html id="sn-power" label="4" text="The 67 trillion assumes that the chip runs at its highest clock the whole time. The H100 may use at most 700 W. A program with heavy math can reach that limit, and the chip then lowers its clock. The power also depends on the numbers, because every transistor that switches between 0 and 1 uses a little energy. [Horace He](https://www.thonking.ai/p/strangely-matrix-multiplications) ran the same large calculation on an A100, the GPU before the H100, once with all zeros and once with random numbers. With zeros, the chip kept a higher clock, and the calculation ran about 15% faster." %}
 
-The H100 also has much more bandwidth. Its memory is called HBM (high bandwidth memory), and it reads 3.35 TB per second, which is about 840 billion 32-bit numbers. The H100 needs 80 operations per number, close to the 64 of the EPYC 9654.{% include components/sidenote.html id="sn-balance" label="4" text="Designers keep the math and the bandwidth of a chip in about the same ratio, because extra math that always waits on memory is wasted area. The GPU has many times more of both, so programs that run at the speed of memory also run many times faster on it." %}
+The H100 also has much more bandwidth. Its memory is called HBM (high bandwidth memory), and it reads 3.35 TB per second, which is about 840 billion 32-bit numbers. The H100 needs 80 operations per number, close to the 64 of the EPYC 9654.{% include components/sidenote.html id="sn-balance" label="5" text="Designers keep the math and the bandwidth of a chip in about the same ratio, because extra math that always waits on memory is wasted area. The GPU has many times more of both, so programs that run at the speed of memory also run many times faster on it." %}
 
 The latency of the H100 is longer than the CPU's. A read from HBM takes about 650 ticks, which is about 370 nanoseconds. To use all of its bandwidth, the H100 needs 3.35 TB per second times 370 nanoseconds of reads on the way, which is about 1.2 MB. With 32-bit numbers, one place of `y = a·x + y` reads 8 bytes, so the H100 needs about 150,000 reads on the way at the same time.
 
@@ -178,15 +181,30 @@ The diagram shows one scheduler and a few threads. Each thread runs a few math i
 
 With a few threads, the scheduler has nothing to run on most ticks. With more threads, some thread is almost always ready, so the other threads run while one thread waits. More math between reads also helps, because each thread then has more work to do before it waits.
 
-The H100 can keep 270,336 threads on the chip at the same time, which is more than the 150,000 that it needs. It has 33 MB of registers to hold their numbers.{% include components/sidenote.html id="sn-registers" label="5" text="A read needs a register to put its result in, so the registers also limit how many reads can be on the way. The H100's 33 MB of registers can hold many times the 1.2 MB that its memory needs on the way. The registers are one more level of storage that hides the latency." %}
+A thread can also hide part of a wait on its own, as long as its next instructions don't need the number that it waits for. For example, a thread that needs 4 numbers from memory can start all 4 reads one after another and then wait once, instead of waiting 4 times. Math needs the same care. A math unit can start a new multiplication on every tick, but each result is ready only a few ticks after it starts. Independent instructions that one thread keeps on the way at the same time are called instruction-level parallelism. A GPU hides latency in both ways, with many threads and with independent work inside each thread.
+
+The H100 can keep 270,336 threads on the chip at the same time, which is more than the 150,000 that it needs. It has 33 MB of registers to hold their numbers.{% include components/sidenote.html id="sn-registers" label="6" text="A read needs a register to put its result in, so the registers also limit how many reads can be on the way. The H100's 33 MB of registers can hold many times the 1.2 MB that its memory needs on the way. The registers are one more level of storage that hides the latency." %}
 
 ## Warps
 
 Before a thread can run an instruction, the chip has to fetch the instruction from memory and decode it, which means working out what the instruction asks for. Fetching and decoding take circuits and power. On a throughput chip, most threads run the same program on different numbers, so many threads need the same instruction at the same time.
 
-The H100 therefore groups its threads in sets of 32, and each set is called a warp. The chip fetches and decodes one instruction for the whole warp, and all 32 threads run it at the same time, each on its own numbers. The scheduler picks a warp, not a single thread, on each tick.{% include components/sidenote.html id="sn-diverge" label="6" text="The threads of a warp share one instruction, so they must also follow the same path through the program. When some threads of a warp take one side of an `if` and others take the other side, the warp runs both sides one after the other. The threads that didn't take a side sit idle while that side runs." %}
+The H100 therefore groups its threads in sets of 32, and each set is called a warp. The chip fetches and decodes one instruction for the whole warp, and all 32 threads run it at the same time, each on its own numbers. The scheduler picks a warp, not a single thread, on each tick.{% include components/sidenote.html id="sn-diverge" label="7" text="The threads of a warp share one instruction, so they must also follow the same path through the program. When some threads of a warp take one side of an `if` and others take the other side, the warp runs both sides one after the other. The threads that didn't take a side sit idle while that side runs." %}
 
 The scheduler from the last diagram works the same way with warps. Each row is then a warp of 32 threads, and each instruction runs on 32 numbers at once.
+
+## Reading memory as a warp
+
+The threads of a warp also read memory together. Each thread asks for its own address, and the chip collects the 32 addresses of the warp and serves them as one request.
+
+Memory doesn't send single numbers. The memory system moves data in pieces of 32 bytes, called sectors, so a read of one 4-byte number still moves a whole sector. When several threads of a warp read numbers in the same sector, the chip moves that sector only once for all of them. The pattern of the addresses therefore sets how much data a warp moves:
+
+- When the 32 threads read 32 neighboring numbers, the numbers fill 128 bytes, which is 4 sectors. Every byte that moves is used.
+- When each thread reads a number far from the others, the warp moves 32 sectors, which is 1,024 bytes. It uses only 128 of them, which is an eighth of the bandwidth.
+
+[![Two warps reading memory. When 32 threads read 32 neighboring numbers, the warp moves 4 sectors of 8 numbers and uses all of them. When 32 threads read numbers that sit far apart, each thread's number is in its own sector, so the warp moves 32 sectors and uses one number from each]({{ '/assets/images/gpu-coalescing.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/gpu-coalescing.svg' | relative_url }})
+
+Reads in which the threads of a warp use neighboring addresses are called coalesced. A program should therefore give neighboring threads neighboring numbers.{% include components/sidenote.html id="sn-dram" label="8" text="HBM adds a second reason. Its bits sit in rows of a grid, and a read first copies a whole row into a buffer at the edge of the grid. Further reads from the same row come from the buffer. A read from another row has to open that row first, which takes longer. Neighboring addresses sit in the same row, so they are cheaper to read." %}
 
 ## SMs
 
@@ -202,7 +220,9 @@ The H100 is therefore built from 132 copies of a smaller processor, and each cop
 | Threads that it can keep | 2,048 | 270,336 |
 | Registers | 256 KB | 33 MB |
 
-On each tick, each of the 4 schedulers of an SM picks one warp and runs one instruction for its 32 threads. The 4 schedulers together run 128 threads per tick, which matches the 128 FP32 cores. The SM keeps 64 warps, so on each tick at most 4 of them run, and the others wait for data or for their turn.{% include components/sidenote.html id="sn-occupancy" label="7" text="The 256 KB of registers on an SM are shared by all of its threads. With 2,048 threads, each thread gets 32 registers. A program that needs more registers per thread leaves room for fewer threads on the SM, so it has fewer threads to switch between while it waits for memory." %}
+An SM is split into 4 quarters. Each quarter has one scheduler, 32 FP32 cores and a quarter of the registers, which is 64 KB. Each warp belongs to one quarter, and only the scheduler of that quarter runs it. The SM also has load and store units, which handle the reads and writes of memory, and special function units, which compute functions like exp, sin and square root.
+
+On each tick, each of the 4 schedulers of an SM picks one warp and runs one instruction for its 32 threads. The 4 schedulers together run 128 threads per tick, which matches the 128 FP32 cores. The SM keeps 64 warps, so on each tick at most 4 of them run, and the others wait for data or for their turn.
 
 ## Blocks and shared memory
 
@@ -225,16 +245,27 @@ For example, a kernel that brightens a picture of 1024 by 1024 pixels could use 
 
 The blocks of a grid must not depend on each other, so the GPU can run them in any order on any SM. An SM can run several blocks at the same time, and it starts a new block when one finishes. The same kernel can run on a small GPU with a few SMs or on an H100 with 132. A grid with many more blocks than SMs keeps every SM busy.
 
+The number of blocks that fit on an SM at the same time depends on what each block needs. An SM has room for 2,048 threads, 256 KB of registers and 228 KB of shared memory, and its blocks have to fit in all three. For example, a register holds one 32-bit number, which is 4 bytes, so a block of 1,024 threads with 32 registers per thread takes 128 KB of registers:
+
+- With 32 registers per thread, 2 such blocks fit on an SM, and their 64 warps fill all 64 warp places.
+- With 64 registers per thread, a block takes all 256 KB, so only one block fits, and it fills 32 warp places.
+
+The share of the SM's 64 warp places that its blocks fill is called occupancy, which is 100% in the first case and 50% in the second. With lower occupancy, the scheduler has fewer warps to switch between while warps wait for memory.
+
+The blocks that run on the SMs at the same time are called a wave. If one block fits on each SM, a grid of 132 blocks runs in one wave on the H100. A grid of 133 blocks needs a second wave for its last block, so it takes about twice as long. During the second wave, 131 SMs sit idle. When a grid runs in many waves, the last wave is only a small part of the time, which is one more reason to use many more blocks than SMs.
+
 The CPU and the GPU also work at the same time. When the CPU starts a kernel, it puts the kernel in a queue for the GPU and goes on to its next instruction. The CPU waits for the GPU only when it needs a result.
 
 ## Levels of memory
 
-A throughput chip still uses caches, because a read from a cache needs less bandwidth from HBM. Each SM of the H100 has an L1 cache, and all the SMs share one larger cache in the middle of the chip, which is called the L2 cache.
+A throughput chip still uses caches, because a read from a cache needs less bandwidth from HBM. Each SM of the H100 has an L1 cache, and all the SMs share one larger cache in the middle of the chip, which is called the L2 cache.{% include components/sidenote.html id="sn-l2" label="9" text="The L2 cache of the H100 is split into two halves, and each SM connects directly to only one of them. Reads from the other half go through a connection across the chip." %}
 
 The L1 cache and shared memory are the same storage on the chip. Each SM has 256 KB of fast storage, and a kernel can set up to 228 KB of it as shared memory, while the rest works as the L1 cache. A kernel that uses more shared memory leaves less room for the L1 cache. The two parts differ in who decides what they keep:
 
 - The hardware manages the L1 cache. When a thread reads a number from HBM, the hardware keeps a copy in the L1 cache, so that a second read of the same number is fast. The kernel can't choose what stays in the L1 cache.
 - The kernel manages shared memory. The kernel copies numbers into shared memory itself, and the numbers stay there until the kernel writes over them. All the threads of a block can read and write them.
+
+The levels on the chip, from the registers to the L2 cache, are built from SRAM, which stores each bit in a small circuit of about 6 transistors. SRAM is fast, but it takes much more area for each bit than DRAM. A chip therefore has room for only a little of it.
 
 The H100 also connects to other chips. NVLink is a direct link to other GPUs, and PCIe is the link to the CPU and its memory. A level of memory that is closer to the math units is smaller, but it has more bandwidth and a shorter latency.
 
@@ -255,7 +286,7 @@ The amount of math per number depends on the problem, and for most problems it d
 
 Matrix multiplication is different, because each number is used many times. To multiply two matrices of size $n$ by $n$, the chip reads $2n^2$ numbers and does $2n^3$ operations, because each output is a sum of $n$ products. Each number is used $n$ times, which gives $n$ operations per number. A bigger matrix gives more math per number.
 
-Neural networks are mostly matrix multiplications, so NVIDIA added math units that do only matrix multiplication, called tensor cores. A tensor core does a small matrix multiply in one step. With bf16 numbers, which is a 16-bit number format that takes 2 bytes, the H100's tensor cores do 989 trillion operations per second.{% include components/sidenote.html id="sn-matmul" label="8" text="Matrix multiplication is one of the few common problems with enough math per number to keep a GPU's math units busy. Hardware for it can run at full speed, while faster hardware for `y = a·x + y` would only wait longer on memory." %}
+Neural networks are mostly matrix multiplications, so NVIDIA added math units that do only matrix multiplication, called tensor cores. A tensor core does a small matrix multiply in one step, and each SM has 4 of them, one in each quarter. With bf16 numbers, which is a 16-bit number format that takes 2 bytes, the H100's tensor cores do 989 trillion operations per second.{% include components/sidenote.html id="sn-matmul" label="10" text="Matrix multiplication is one of the few common problems with enough math per number to keep a GPU's math units busy. Hardware for it can run at full speed, while faster hardware for `y = a·x + y` would only wait longer on memory." %}
 
 The tensor cores need much more math per number than the FP32 cores. With bf16 numbers from HBM, they need about 590 operations per number, so a matrix multiply needs a size of about 590 to keep them busy. The gap also grows with each new generation of GPUs. From the V100 in 2017 to the H100 in 2022, the speed of the tensor cores grew about 8 times, from 125 to 989 trillion operations per second. In the same years, the bandwidth of HBM grew about 3.7 times, from 0.9 to 3.35 TB per second.
 
@@ -265,14 +296,47 @@ The diagram starts with tensor cores and a size of 256. You can change the probl
 
 From shared memory, the tensor cores need only about 60 operations per number, so a size of about 60 is enough. A fast matrix multiply on a GPU therefore copies small pieces of the two matrices from HBM into shared memory, and then it uses each number there many times.
 
+## TMA
+
+Each block of a matrix multiply copies new pieces of the two matrices into shared memory again and again. Without help, a kernel does the copy with its own threads. Each thread works out its addresses and loads a few numbers into its registers. It then stores them into shared memory, so every copy costs instructions and registers on every thread.
+
+Since the H100, each SM has a copy unit for this job, called the TMA (tensor memory accelerator). One thread describes a whole piece of a matrix, by its size and its position in the matrix, and the TMA works out every address itself. It moves the numbers from HBM into shared memory without passing through registers, and the other threads keep working while it runs. When the threads need the numbers, they wait on a counter in shared memory, which counts the bytes that have arrived.
+
+## Clusters
+
+Different blocks often need the same piece of a matrix. For example, two blocks that compute neighboring pieces of the result in the same rows need the same rows of the first matrix, and each of them copies those rows into its own shared memory.
+
+The SMs of the H100 sit in groups called GPCs (graphics processing clusters, a name left over from graphics), and each GPC has up to 18 SMs. Since the H100, a kernel can group its blocks into clusters of up to 8 blocks, and the GPU starts all the blocks of a cluster at the same time on SMs of one GPC. The threads of a block can then read and write the shared memory of the other blocks in its cluster, which NVIDIA calls distributed shared memory. One block can load a piece of a matrix, and the other blocks read it from that block's shared memory instead of from the L2 cache.
+
+[![A GPC with 6 SMs, where a cluster of 4 blocks runs on SMs 0, 1, 3 and 4. Block 0 reads numbers from the L2 cache into the shared memory of SM 0, and the other 3 blocks of the cluster read them from there. SMs 2 and 5 run other blocks]({{ '/assets/images/gpu-clusters.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/gpu-clusters.svg' | relative_url }})
+
+A cluster is one more level between the block and the grid, and a grid is then made of clusters instead of single blocks.
+
 ## Overview
 
-[![The parts of the H100: one SM with its schedulers, math units, registers and shared memory, 132 SMs sharing the L2 cache, HBM below, links to other GPUs and the CPU, and how a kernel splits into a grid, blocks, warps and threads]({{ '/assets/images/gpu-overview.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/gpu-overview.svg' | relative_url }})
+The diagram puts the parts of this note together.
+
+[![The parts of the H100. One SM has 4 quarters, each with a warp scheduler, 32 FP32 cores, a tensor core and 64 KB of registers, plus load and store units, special function units, 256 KB of shared memory and L1 cache, and the TMA. The SMs sit in 8 GPCs, 132 in all. The L2 cache has two halves, and HBM sits below. NVLink goes to other GPUs and PCIe to the CPU. A kernel splits into a grid, clusters, blocks, warps and threads]({{ '/assets/images/gpu-overview.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/gpu-overview.svg' | relative_url }})
+
+A number travels from memory to the math units in four steps:
+
+1. It starts in HBM, which holds 80 GB and is about 650 ticks away.
+2. It passes through the L2 cache, which all the SMs share.
+3. It reaches an SM and goes into shared memory in one of two ways. Either a thread loads it into a register and then stores it into shared memory, or the TMA copies it straight into shared memory.
+4. A thread loads it from shared memory into a register, and the FP32 cores or the tensor core of the thread's quarter do the math.
+
+The work splits the other way, from the top down:
+
+- A kernel runs a grid of blocks, which can be grouped into clusters.
+- A cluster runs on SMs of one GPC, and a block runs on one SM.
+- A block splits into warps of 32 threads, and each warp runs on one quarter of the SM.
+- Each thread keeps its own numbers in registers.
 
 ## Further reading
 
 - [How GPU Computing Works](https://www.youtube.com/watch?v=3l10o0DYJXg) (Jones, 2021)
 - [Making Deep Learning Go Brrrr From First Principles](https://horace.io/brrr_intro.html) (He, 2022)
+- [Inside NVIDIA GPUs: Anatomy of high performance matmul kernels](https://www.aleksagordic.com/blog/matmul) (Gordić, 2025)
 - [Modal GPU Glossary](https://modal.com/gpu-glossary)
 - [How To Scale Your Model, the GPU chapter](https://jax-ml.github.io/scaling-book/gpus/)
 - [The Free Lunch Is Over](http://www.gotw.ca/publications/concurrency-ddj.htm) (Sutter, 2005)

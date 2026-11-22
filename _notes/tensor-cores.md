@@ -18,9 +18,9 @@ extra_css:
 
 - [Tensor cores](#tensor-cores)
 - [BF16](#bf16)
-- [The mma instruction](#the-mma-instruction)
+- [mma instruction](#mma-instruction)
 - [Tensor core speed of the B200](#tensor-core-speed-of-the-b200)
-- [The cuBLAS reference](#the-cublas-reference)
+- [cuBLAS reference](#cublas-reference)
 - [Kernel 1: one warp for each 16 by 8 tile](#kernel-1-one-warp-for-each-16-by-8-tile)
 - [Kernel 2](#kernel-2)
 - [Results](#results)
@@ -52,7 +52,7 @@ BF16 is a 16-bit floating point number. It keeps the 8 exponent bits of FP32 and
 
 The programs in this note round `A` and `B` to BF16 once on the CPU. The spot check compares 100 elements of `C` with an FP64 sum of the same rounded numbers, so it measures only the error of the sums.
 
-## The mma instruction
+## mma instruction
 
 The instruction that this note uses is `mma.sync`, the warp-level matrix multiply-add of PTX. Its full name says what it computes:
 
@@ -101,7 +101,7 @@ NVIDIA lists the B200 at 2,250 TFLOPS for BF16 inputs, which is 30 times the 74.
 - The ridge point moves from 9.7 FLOPs per byte for the FP32 cores to 2,250 TFLOPS ÷ 7,672 GB per second = 293 FLOPs per byte. A kernel has to use each number that it loads from HBM many more times to keep the tensor cores busy.
 - At M = N = K = 4096, the 137 billion operations take at least 0.061 ms. Reading `A` and `B` from HBM once and writing `C` once takes about 0.017 ms. With the FP32 cores, the math took 70 times longer than the reads, and with the tensor cores it takes only about 3.5 times longer.
 
-## The cuBLAS reference
+## cuBLAS reference
 
 cuBLAS multiplies BF16 matrices with FP32 sums through `cublasGemmEx`:
 
