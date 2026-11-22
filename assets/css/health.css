@@ -143,15 +143,6 @@ html.dark-mode .hd {
   background: var(--hd-ideal);
 }
 
-.hd-swatch--hit {
-  background: var(--hd-good);
-}
-
-.hd-swatch--miss {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--hd-raw);
-}
-
 .hd-tiles {
   margin-top: 36px;
   display: grid;

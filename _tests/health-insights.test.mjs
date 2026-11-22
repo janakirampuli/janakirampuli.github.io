@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GOALS, addRegularity, regularityBetween, weeklySummaries, compareWeeks, completeDays, findLevers, onTarget, targetGrid, watchPeriod, clock, noonMinutes, vitalsCheck, bedtimeEffect, weekendShift, fit } from "../assets/js/health-insights.js";
+import { GOALS, addRegularity, regularityBetween, weeklySummaries, compareWeeks, completeDays, findLevers, onTarget, watchPeriod, clock, noonMinutes, vitalsCheck, bedtimeEffect, weekendShift, fit } from "../assets/js/health-insights.js";
 const date = (i) => new Date(Date.UTC(2026, 8, 1) + i * 864e5).toISOString().slice(0, 10);
 const goal = (k) => GOALS.find((g) => g.key === k);
 const series = (n, f) => Array.from({ length: n }, (_, i) => ({ date: date(i), ...f(i) }));
@@ -70,11 +70,6 @@ test("at most 6 levers, strongest first", () => {
 test("watch period drops iPhone-only months", () => {
   const d = series(10, (i) => ({ steps: 100, asleep: i >= 7 ? 7 : undefined }));
   assert.equal(watchPeriod(d).length, 3);
-});
-test("grid separates hit, miss and missing, and hides empty goals", () => {
-  const rows = targetGrid(series(3, (i) => ({ steps: [8000, 100, undefined][i] })));
-  assert.equal(rows.length, 1); assert.deepEqual(rows[0].cells.map((c) => c.hit), [true, false, null]);
-  assert.equal(rows[0].hits, 1); assert.equal(rows[0].count, 2);
 });
 test("clock helpers round-trip across midnight", () => {
   assert.equal(clock(noonMinutes(60)), "01:00"); assert.equal(clock(noonMinutes(23 * 60)), "23:00");
@@ -146,4 +141,28 @@ test("weekend shift uses Friday and Saturday nights", () => {
   });
   const w = weekendShift(d);
   assert.equal(w.shift, 120); assert.equal(w.free.count, 6); assert.equal(w.work.count, 15);
+});
+test("a missing night is filled with the average of earlier nights, on a copy", async () => {
+  const { estimateSleepGaps } = await import("../assets/js/health-insights.js");
+  const d = [
+    { date: date(0), steps: 1 },
+    { date: date(1), asleep: 6, deep: 1, core: 4, rem: 1, awake: 0.2, sleep_hrv: 60, breath: 14 },
+    { date: date(2), asleep: 8, deep: 2, core: 4, rem: 1, unspecified: 1, awake: 0.4, sleep_hrv: 80 },
+    { date: date(3), steps: 5 },
+    { date: date(4), asleep: 7, deep: 1, core: 5, rem: 1, awake: 0.3 },
+    { date: date(5), steps: 9 },
+  ];
+  const out = estimateSleepGaps(d);
+  assert.equal(out[0].estimated, undefined, "no earlier night to average");
+  assert.equal(out[5].estimated, undefined, "a trailing night may still be syncing");
+  assert.equal(out[1], d[1], "real nights are left as they are");
+  const e = out[3];
+  assert.equal(e.estimated, true);
+  assert.deepEqual([e.deep, e.core, e.rem, e.unspecified, e.awake].map((v) => Math.round(v * 100) / 100), [1.5, 4, 1, 0.5, 0.3]);
+  assert.equal(e.deep + e.core + e.rem + e.unspecified, 7, "stages add up to the average time asleep");
+  assert.equal(e.sleep_hrv, 70);
+  assert.equal(e.breath, 14);
+  assert.equal(e.steps, 5, "other fields are kept");
+  assert.equal(e.asleep, undefined, "time asleep stays missing, so statistics skip the night");
+  assert.equal(d[3].estimated, undefined, "the input is not changed");
 });

@@ -1,7 +1,7 @@
 import { infoFor } from './health-info.js';
 import {
-  addRegularity, bedtimeEffect, compareWeeks, completeDays, findLevers,
-  targetGrid, vitalsCheck, watchPeriod, weekendShift, weeklySummaries,
+  addRegularity, bedtimeEffect, compareWeeks, completeDays, estimateSleepGaps, findLevers,
+  vitalsCheck, watchPeriod, weekendShift, weeklySummaries,
 } from './health-insights.js';
 
 const root = document.getElementById('health-dashboard');
@@ -601,6 +601,8 @@ const SECTIONS = [
   {
     title: '1. Sleep',
     sub: 'Duration, timing, stages and overnight vitals',
+    // Nights with no watch data are drawn from your average, only in this section.
+    estimates: true,
     charts: [
       trends('Sleep duration', 'Hours, 7-day average', hours, [
         { key: 'in_bed_ma', label: 'Main sleep span', color: s2 },
@@ -772,8 +774,9 @@ function fromFirstReading(days, chart) {
 }
 
 function profileRows(chart, days) {
+  const measured = days.filter((day) => !day.estimated);
   return chart.rows.map((row) => {
-    const values = days.map((day) => day[row.key]).filter(Number.isFinite);
+    const values = measured.map((day) => day[row.key]).filter(Number.isFinite);
     const average = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
     const hits = row.ideal ? values.filter((v) => v >= row.low && v <= row.high).length : null;
     return { ...row, average, hits, count: values.length };
@@ -970,80 +973,6 @@ function renderLevers(parent, levers, nights) {
     html('span', `hd-lever__verdict hd-lever__verdict--${lever.helps ? 'helps' : 'costs'}`, `${lever.helps ? '↗' : '↘'} ${verdict}`, card);
     html('span', 'hd-tile__reference', `${lever.countWith} days with, ${lever.countWithout} days ${lever.other}`, card);
   });
-}
-
-function renderGrid(parent, rows, width) {
-  html('h4', 'hd-block-title', 'Days on target', parent);
-  const figure = html('figure', 'hd-chart', undefined, parent);
-  const legendList = html('ul', 'hd-legend', undefined, figure);
-  [['hd-swatch hd-swatch--hit', 'On target'], ['hd-swatch hd-swatch--miss', 'Off target'], ['hd-swatch', 'No data']].forEach(([className, label]) => {
-    const item = html('li', '', undefined, legendList);
-    html('span', className, undefined, item);
-    item.append(label);
-  });
-  const frame = html('div', 'hd-frame', undefined, figure);
-  const available = Math.max(260, Math.round(frame.clientWidth || width));
-  const narrow = available < 520;
-  const labelWidth = narrow ? 104 : 150;
-  const countWidth = 46;
-  const count = rows[0].cells.length;
-  const gap = 1;
-  const cell = Math.max(3, Math.min(16, (available - labelWidth - countWidth) / count - gap));
-  const rowHeight = Math.max(cell, 13) + 5;
-  const height = rows.length * rowHeight + 20;
-  const node = svg('svg', {
-    class: 'hd-plot',
-    viewBox: `0 0 ${available} ${height}`,
-    role: 'img',
-    tabindex: '0',
-    'aria-label': rows.map((row) => `${row.goal.label}: on target ${row.hits} of ${row.count} days`).join('. '),
-  });
-  rows.forEach((row, r) => {
-    const y = r * rowHeight;
-    const label = svg('text', { x: 0, y: y + rowHeight / 2 + 3 }, node);
-    label.textContent = row.goal.label;
-    const tally = svg('text', { x: available, y: y + rowHeight / 2 + 3, 'text-anchor': 'end' }, node);
-    tally.textContent = `${row.hits}/${row.count}`;
-    row.cells.forEach((item, c) => {
-      const attrs = { x: labelWidth + c * (cell + gap), y: y + (rowHeight - cell) / 2, width: cell, height: cell, rx: 1.5 };
-      if (item.hit === null) svg('rect', { ...attrs, fill: 'var(--hd-grid)' }, node);
-      else if (item.hit) svg('rect', { ...attrs, fill: 'var(--hd-good)' }, node);
-      else svg('rect', { ...attrs, fill: 'none', stroke: 'var(--hd-raw)', 'stroke-width': 1 }, node);
-    });
-  });
-  const dates = rows[0].cells;
-  [0, dates.length - 1].forEach((index) => {
-    const label = svg('text', {
-      x: labelWidth + index * (cell + gap) + (index ? cell : 0),
-      y: height - 4,
-      'text-anchor': index ? 'end' : 'start',
-    }, node);
-    label.textContent = shortDate(dates[index].date);
-  });
-  frame.appendChild(node);
-
-  const tip = html('div', 'hd-tip', undefined, frame);
-  tip.hidden = true;
-  node.addEventListener('pointerleave', () => { tip.hidden = true; });
-  const show = (event) => {
-    const rect = node.getBoundingClientRect();
-    const scale = available / rect.width;
-    const c = Math.floor(((event.clientX - rect.left) * scale - labelWidth) / (cell + gap));
-    const r = Math.floor(((event.clientY - rect.top) * scale) / rowHeight);
-    const row = rows[r];
-    const item = row?.cells[c];
-    if (!item) { tip.hidden = true; return; }
-    tip.replaceChildren();
-    html('div', 'hd-tip__date', longDate(item.date), tip);
-    html('div', 'hd-tip__name', row.goal.label, tip);
-    html('div', '', item.value === null ? 'No data' : `${row.goal.format(item.value)} · ${item.hit ? 'On target' : 'Off target'} (${row.goal.target})`, tip);
-    tip.hidden = false;
-    const px = (event.clientX - rect.left);
-    const left = px + 12 + tip.offsetWidth > frame.clientWidth ? px - tip.offsetWidth - 12 : px + 12;
-    tip.style.transform = `translate(${Math.max(0, left)}px, ${event.clientY - rect.top + 12}px)`;
-  };
-  node.addEventListener('pointermove', show);
-  node.addEventListener('pointerdown', show);
 }
 
 const VITAL_STATUS = {
@@ -1301,13 +1230,12 @@ function renderOverview(content, allDays) {
   const shift = weekendShift(days);
   if (shift) renderWeekend(section, shift);
   renderLevers(section, findLevers(days), days.length);
-  const rows = targetGrid(days);
-  if (rows.length) renderGrid(section, rows, content.clientWidth);
 }
 
 function render(content, days) {
   closeInfo();
   content.replaceChildren();
+  const sleepDays = estimateSleepGaps(days);
 
   SECTIONS.forEach((section) => {
     const heading = html('div', 'hd-section', undefined, content);
@@ -1315,7 +1243,7 @@ function render(content, days) {
     html('p', 'hd-section__sub', section.sub, heading);
     const grid = html('div', 'hd-grid', undefined, content);
     // Drawn after every card exists, because the grid sets each card's final width.
-    const draws = section.charts.map((chart) => addChart(grid, chart, days)).filter(Boolean);
+    const draws = section.charts.map((chart) => addChart(grid, chart, section.estimates ? sleepDays : days)).filter(Boolean);
     draws.forEach((draw) => draw());
     if (draws.length === 0) heading.remove();
   });

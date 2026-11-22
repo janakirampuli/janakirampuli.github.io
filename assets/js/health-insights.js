@@ -191,15 +191,35 @@ export function watchPeriod(days) {
   return first > 0 ? days.slice(first) : days;
 }
 
-export function targetGrid(days) {
-  return GOALS.map((goal) => {
-    const cells = days.map((day) => {
-      const value = day[goal.key];
-      return { date: day.date, value: finite(value) ? value : null, hit: finite(value) ? onTarget(goal, value) : null };
-    });
-    const measured = cells.filter((cell) => cell.value !== null);
-    return { goal, cells, hits: measured.filter((cell) => cell.hit).length, count: measured.length };
-  }).filter((row) => row.count > 0);
+export const SLEEP_STAGES = ['deep', 'core', 'rem', 'unspecified', 'awake'];
+export const SLEEP_VITALS = ['sleep_hrv', 'breath'];
+
+// Fills a night with no watch data with the average of the nights before it, so sleep charts do not break.
+// Returns copies, so estimates never reach the statistics built from the real days.
+export function estimateSleepGaps(days) {
+  const isNight = days.map((day) => finite(day.asleep));
+  // A missing night at the end may still be syncing, so only gaps before the last real night are filled.
+  const last = isNight.lastIndexOf(true);
+  const sums = {};
+  const counts = {};
+  let nights = 0;
+  return days.map((day, i) => {
+    if (isNight[i]) {
+      nights += 1;
+      // A stage the watch did not record counts as zero, so the stages add up to an average night.
+      SLEEP_STAGES.forEach((key) => { sums[key] = (sums[key] ?? 0) + (day[key] ?? 0); });
+      SLEEP_VITALS.filter((key) => finite(day[key])).forEach((key) => {
+        sums[key] = (sums[key] ?? 0) + day[key];
+        counts[key] = (counts[key] ?? 0) + 1;
+      });
+      return day;
+    }
+    if (nights === 0 || i > last) return day;
+    const estimate = { ...day, estimated: true };
+    SLEEP_STAGES.forEach((key) => { estimate[key] = sums[key] / nights; });
+    SLEEP_VITALS.filter((key) => counts[key]).forEach((key) => { estimate[key] = sums[key] / counts[key]; });
+    return estimate;
+  });
 }
 
 const REGULARITY_WINDOW = 7;
