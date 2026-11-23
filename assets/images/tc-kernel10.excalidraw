@@ -29,14 +29,14 @@
       "updated": 1795164107160,
       "link": null,
       "locked": false,
-      "text": "Kernel 1: one warp for each 16 by 8 tile of C",
+      "text": "Kernel 10: one warp for each 16 by 8 tile of C",
       "fontSize": 26,
       "fontFamily": 1,
       "textAlign": "left",
       "verticalAlign": "top",
       "baseline": 24,
       "containerId": null,
-      "originalText": "Kernel 1: one warp for each 16 by 8 tile of C",
+      "originalText": "Kernel 10: one warp for each 16 by 8 tile of C",
       "lineHeight": 1.25
     },
     {

@@ -427,57 +427,36 @@ The block still walks along a strip of `A` and a strip of `B`, as in kernel 3. E
 
 Neighboring threads compute neighboring columns of `C`, so the threads of a warp read neighboring numbers of `s_B` and write neighboring numbers of `C`. If each thread computed a short row of `C` instead, it could reuse a number of `s_A` in the same way, but the threads of a warp would write numbers of `C` that are several columns apart.
 
-Here is the kernel:
+Here is the work of one block. From here on, the code leaves out the bounds checks, and `A[r][c]` stands for `A[r * K + c]`:
 
 ```cpp
-#define BM 64          // rows of the C tile
-#define BN 64          // columns of the C tile
-#define TM 16          // results for each thread: a column of TM elements of C
-#define BK (BM / TM)   // how far the tiles move along k at each step: s_A and s_B then
-                       // hold one number for each thread of the block, so BK is 4
+// Compute a BM x BN = 64 x 64 tile of C with 64 x 4 threads
+// Each thread computes a column of TM = 16 numbers of the tile, from (c_row, c_col) down
+__shared__ float s_A[BM][BK], s_B[BK][BN];   // BK = 4: one number of each for every thread
 
-// launched with dim3 block(BN, BM / TM), which is 64 x 4 threads,
-// and dim3 grid(N / BN, M / BM), one block for each tile of C
-__global__ void sgemm_4(const float* A, const float* B, float* C, int M, int K, int N) {
-    __shared__ float s_A[BM][BK];  // 64 x 4 tile of A
-    __shared__ float s_B[BK][BN];  // 4 x 64 tile of B
+// Registers for this thread's column of C
+float results[TM] = {};
 
-    int tx = threadIdx.x, ty = threadIdx.y;
+// Iterate over BK-wide chunks of k
+for (int k0 = 0; k0 < K; k0 += BK) {
+    // ... load A's chunk [BM, BK] into s_A, one number per thread ...
+    // ... load B's chunk [BK, BN] into s_B, one number per thread ...
+    __syncthreads();
 
-    // corner of this block's tile of C
-    int block_row = blockIdx.y * BM;
-    int block_col = blockIdx.x * BN;
-
-    // this thread computes rows c_row to c_row + TM - 1 of column c_col of the tile
-    int c_col = tx;
-    int c_row = ty * TM;
-
-    // the number this thread copies into s_A: s_A is 64 x 4, not the block's shape,
-    // so number the threads 0 to 255 and count 4 numbers to a row
-    int tid = ty * BN + tx;
-    int a_row = tid / BK, a_col = tid % BK;
-
-    // the number this thread copies into s_B: s_B has the block's shape
-    int b_row = ty, b_col = tx;
-
-    float results[TM] = {0.0f};
-    for (int i = 0; i < K / BK; i++) {
-        s_A[a_row][a_col] = A[(block_row + a_row) * K + i * BK + a_col];
-        s_B[b_row][b_col] = B[(i * BK + b_row) * N + block_col + b_col];
-        __syncthreads();
-        for (int k = 0; k < BK; k++) {
-            float b = s_B[k][c_col];  // read once, used for all TM results
-            for (int r = 0; r < TM; r++) {
-                results[r] += s_A[c_row + r][k] * b;
-            }
-        }
-        __syncthreads();
+    for (int k = 0; k < BK; k++) {
+        // Read one number of s_B and use it for all TM results of the column
+        float b = s_B[k][c_col];
+        for (int r = 0; r < TM; r++)
+            results[r] += s_A[c_row + r][k] * b;
     }
-    for (int r = 0; r < TM; r++) {
-        C[(block_row + c_row + r) * N + block_col + c_col] = results[r];
-    }
+
+    // Every thread is done with s_A and s_B before the next chunk overwrites them
+    __syncthreads();
 }
+// ... write registers results[..] to C ...
 ```
+
+The grid has one block for each tile of `C`.
 
 A warp is 32 threads with neighboring `tx` and the same `ty`, so it covers 32 neighboring columns of the tile and the same 16 rows. Its copy into `s_B` reads 32 neighboring numbers in one row of `B`, which is coalesced. Its copy into `s_A` reads 8 rows of `A` with 4 neighboring numbers in each, so it needs one sector for each row and uses half of each sector.
 
@@ -770,66 +749,34 @@ The steps along the strips are the same as in kernel 4, and only the math at eac
 
 [![Kernel 5 at one k: one thread computes a small square of C. It reads the numbers of s_A in column k and its rows, and the numbers of s_B in row k and its columns, multiplies every pair and adds each product to the element of its square in the same row and column. The next thread computes the next square]({{ '/assets/images/matmul-kernel5.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/matmul-kernel5.svg' | relative_url }})
 
-Here is the kernel:
+Here is the work of one block:
 
 ```cpp
-#define BM 64                // rows of the C tile
-#define BN 64                // columns of the C tile; the tile must be square, see BK
-#define TM 4                 // rows of the square that each thread computes
-#define TN 4                 // columns of the square
-#define BK (BM / (TM * TN))  // how far the tiles move along k at each step: s_A and s_B then
-                             // hold one number for each thread of the block, so BK is 4
-#define NT ((BM / TM) * (BN / TN))  // threads per block: 16 x 16 = 256
+// Compute a 64 x 64 tile of C with 16 x 16 threads
+// Each thread computes a TM x TN = 4 x 4 square of the tile, with its corner at (c_row, c_col)
+float results[TM][TN] = {};
+float reg_A[TM];  // column k of s_A, in this thread's rows
+float reg_B[TN];  // row k of s_B, in this thread's columns
 
-// launched with dim3 block(BN / TN, BM / TM), which is 16 x 16 threads,
-// and dim3 grid(N / BN, M / BM), one block for each tile of C
-__global__ void sgemm_5(const float* A, const float* B, float* C, int M, int K, int N) {
-    __shared__ float s_A[BM][BK];  // 64 x 4 tile of A
-    __shared__ float s_B[BK][BN];  // 4 x 64 tile of B
+// Iterate over BK-wide chunks of k, as in kernel 4
+for (int k0 = 0; k0 < K; k0 += BK) {
+    // ... load A's chunk [BM, BK] into s_A and B's chunk [BK, BN] into s_B ...
+    __syncthreads();
 
-    int tx = threadIdx.x, ty = threadIdx.y;
+    for (int k = 0; k < BK; k++) {
+        // Read this thread's TM numbers of s_A and TN numbers of s_B into registers
+        for (int m = 0; m < TM; m++) reg_A[m] = s_A[c_row + m][k];
+        for (int n = 0; n < TN; n++) reg_B[n] = s_B[k][c_col + n];
 
-    // corner of this block's tile of C
-    int block_row = blockIdx.y * BM;
-    int block_col = blockIdx.x * BN;
-
-    // this thread computes a TM x TN square of the tile, starting at row c_row and column c_col
-    int c_row = ty * TM;
-    int c_col = tx * TN;
-
-    // the number this thread copies into s_A and into s_B: number the threads 0 to 255,
-    // so that neighboring threads copy neighboring numbers
-    int tid = ty * (BN / TN) + tx;
-    int a_row = tid / BK, a_col = tid % BK;
-    int b_row = tid / BN, b_col = tid % BN;
-
-    float results[TM][TN] = {0.0f};
-    float reg_A[TM];  // column k of s_A, in this thread's rows
-    float reg_B[TN];  // row k of s_B, in this thread's columns
-
-    for (int i = 0; i < K / BK; i++) {
-        s_A[a_row][a_col] = A[(block_row + a_row) * K + i * BK + a_col];
-        s_B[b_row][b_col] = B[(i * BK + b_row) * N + block_col + b_col];
-        __syncthreads();
-
-        for (int k = 0; k < BK; k++) {
-            for (int m = 0; m < TM; m++) reg_A[m] = s_A[c_row + m][k];
-            for (int n = 0; n < TN; n++) reg_B[n] = s_B[k][c_col + n];
-            // every number of reg_A with every number of reg_B
-            for (int m = 0; m < TM; m++) {
-                for (int n = 0; n < TN; n++) {
-                    results[m][n] += reg_A[m] * reg_B[n];
-                }
-            }
-        }
-        __syncthreads();
+        // Multiply every number of reg_A with every number of reg_B:
+        // TM x TN FFMAs from TM + TN loads
+        for (int m = 0; m < TM; m++)
+            for (int n = 0; n < TN; n++)
+                results[m][n] += reg_A[m] * reg_B[n];
     }
-    for (int m = 0; m < TM; m++) {
-        for (int n = 0; n < TN; n++) {
-            C[(block_row + c_row + m) * N + block_col + c_col + n] = results[m][n];
-        }
-    }
+    __syncthreads();
 }
+// ... write registers results[..][..] to C ...
 ```
 
 Kernel 5 took 5.53 ms, which is 24.86 TFLOPS and 1.15 times faster than kernel 4. With one copy for each thread, the tile has to be square and BK = BM / (TM × TN), which leaves only a few sizes. I tried 8 of them, and 64 by 64 with 4 by 4 squares ran fastest. A 128 by 128 tile with 8 by 4 squares, for example, took 7.54 ms, because its 80 registers for each thread let only one block of 512 threads fit on an SM.
@@ -1099,37 +1046,25 @@ In kernel 6, each thread copies 4 neighboring numbers of a row at once:
 
 [![How the threads of a block copy a tile of A. In kernel 5, a row of the tile takes 4 threads that copy one number each, so a step covers 4 values of k. In kernel 6, each thread copies 4 neighboring numbers with one float4 load, and a second group of 4 in the same columns 64 rows further down, so a step covers 32 values of k]({{ '/assets/images/kernel6-copy.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel6-copy.svg' | relative_url }})
 
-Because a thread can copy several groups, the tile doesn't have to be square, and BK doesn't depend on the number of threads. I tried 52 sizes, with tiles of 64, 128 or 256 rows and columns, squares of 4 or 8 rows and columns, and BK of 8, 16 or 32. A 128 by 128 tile with 8 by 4 squares and BK = 32 ran fastest. Here are the parts of the kernel that change:
+Because a thread can copy several groups, the tile doesn't have to be square, and BK doesn't depend on the number of threads. I tried 52 sizes, with tiles of 64, 128 or 256 rows and columns, squares of 4 or 8 rows and columns, and BK of 8, 16 or 32. A 128 by 128 tile with 8 by 4 squares and BK = 32 ran fastest. Here are the parts of the kernel that change. `X[r][c : + 4]` stands for 4 neighboring numbers that one 16-byte `float4` load or store moves:
 
 ```cpp
-// __align__(16): each group of 4 starts on a 16-byte boundary, which a float4 store needs
-__shared__ __align__(16) float s_A[BM][BK];
-__shared__ __align__(16) float s_B[BK][BN];
+// A float4 store into shared memory needs a 16-byte boundary
+__shared__ __align__(16) float s_A[BM][BK], s_B[BK][BN];
 
-// the first group of 4 neighboring numbers that this thread copies in each tile.
-// its other groups sit in the same columns, a_stride or b_stride rows further down
-int a_row = tid / (BK / 4), a_col = (tid % (BK / 4)) * 4;  // a row of s_A has 8 groups of 4
-int b_row = tid / (BN / 4), b_col = (tid % (BN / 4)) * 4;  // a row of s_B has 32 groups of 4
-int a_stride = NT / (BK / 4), b_stride = NT / (BN / 4);     // 64 and 16 rows
-
-for (int i = 0; i < K / BK; i++) {
-    // reinterpret_cast reads the address of the first number as the address of a float4,
-    // so each copy is one 16-byte load from global memory and one 16-byte store to shared memory.
-    // A_COPIES = BM * BK / (4 * NT) = 2, and B_COPIES = BK * BN / (4 * NT) = 2
-    for (int c = 0; c < A_COPIES; c++) {
-        int r = a_row + c * a_stride;
-        *reinterpret_cast<float4*>(&s_A[r][a_col]) =
-            *reinterpret_cast<const float4*>(&A[(block_row + r) * K + i * BK + a_col]);
+// Iterate over BK-wide chunks of k
+for (int k0 = 0; k0 < K; k0 += BK) {
+    // Load A's chunk [BM, BK] into s_A in groups of 4 neighboring numbers.
+    // The 256 threads take the groups in order, so neighboring threads copy neighboring groups,
+    // and a thread takes another group when the tile has more groups than threads
+    for (int g = tid; g < BM * BK / 4; g += 256) {
+        int r = g / (BK / 4), c = (g % (BK / 4)) * 4;
+        s_A[r][c : + 4] = A[block_row + r][k0 + c : + 4];
     }
-    for (int c = 0; c < B_COPIES; c++) {
-        int r = b_row + c * b_stride;
-        *reinterpret_cast<float4*>(&s_B[r][b_col]) =
-            *reinterpret_cast<const float4*>(&B[(i * BK + r) * N + block_col + b_col]);
-    }
+    // ... load B's chunk [BK, BN] into s_B the same way ...
     __syncthreads();
 
-    // the loop over k is the same as in kernel 5
-    ...
+    // ... the loop over k of kernel 5 ...
 }
 ```
 
@@ -1192,28 +1127,30 @@ Kernel 7 stores the tile of `A` transposed in shared memory, with `k` as the row
 Here are the parts of the kernel that change:
 
 ```cpp
-// s_A is stored transposed, k first: s_A[k][row] holds A[block_row + row][i * BK + k]
+// s_A holds A's chunk transposed, with k as the row: s_A[k][r] = A[block_row + r][k0 + k]
 __shared__ __align__(16) float s_A[BK][BM];
-...
-for (int i = 0; i < K / BK; i++) {
-    // the 4 numbers of A are neighbors along k, so they go into 4 different rows of s_A
-    for (int c = 0; c < A_COPIES; c++) {
-        int r = a_row + c * a_stride;
-        float4 a4 = *reinterpret_cast<const float4*>(&A[(block_row + r) * K + i * BK + a_col]);
-        s_A[a_col + 0][r] = a4.x;
-        s_A[a_col + 1][r] = a4.y;
-        s_A[a_col + 2][r] = a4.z;
-        s_A[a_col + 3][r] = a4.w;
+
+// Iterate over BK-wide chunks of k
+for (int k0 = 0; k0 < K; k0 += BK) {
+    // Load A's chunk with float4 loads, as in kernel 6. The 4 numbers are neighbors along k,
+    // so they go into 4 different rows of s_A with 4 single stores
+    for (int g = tid; g < BM * BK / 4; g += 256) {
+        int r = g / (BK / 4), c = (g % (BK / 4)) * 4;
+        float4 a4 = A[block_row + r][k0 + c : + 4];
+        s_A[c + 0][r] = a4.x;
+        s_A[c + 1][r] = a4.y;
+        s_A[c + 2][r] = a4.z;
+        s_A[c + 3][r] = a4.w;
     }
-    // the copies of B are the same as in kernel 6
-    ...
+    // ... load B's chunk into s_B, as in kernel 6 ...
     __syncthreads();
 
     for (int k = 0; k < BK; k++) {
-        for (int m = 0; m < TM; m++) reg_A[m] = s_A[k][c_row + m];  // TM neighboring numbers in row k
+        // This thread's TM numbers of A for this k now sit side by side in row k,
+        // so vector loads read them, as for s_B
+        for (int m = 0; m < TM; m++) reg_A[m] = s_A[k][c_row + m];
         for (int n = 0; n < TN; n++) reg_B[n] = s_B[k][c_col + n];
-        // the TM x TN FFMAs are the same as in kernel 6
-        ...
+        // ... the TM x TN FFMAs of kernel 5 ...
     }
     __syncthreads();
 }
@@ -1305,31 +1242,27 @@ A 64 by 256 tile with 8 by 8 squares and BK = 16 ran fastest, with `__launch_bou
 
 ```cpp
 __global__ void __launch_bounds__(NT, 2) sgemm_8(...) {
-    __shared__ __align__(16) float s_A[2][BK][BM];  // two buffers of each tile
+    // Two buffers of each tile: the block computes from one while it fills the other
+    __shared__ __align__(16) float s_A[2][BK][BM];
     __shared__ __align__(16) float s_B[2][BK][BN];
 
-    // load_tiles loads this thread's float4s of tile i into registers: A_COPIES of A and B_COPIES of B.
-    // store_tiles stores them into one buffer, with the stores of kernel 7.
-    // before the loop: copy tile 0 into buffer 0
-    float4 a4[A_COPIES], b4[B_COPIES];
-    load_tiles(0, a4, b4);
-    store_tiles(s_A[0], s_B[0], a4, b4);
+    // ... load chunk 0 of A and B into buffer 0, with the copies of kernel 7 ...
     __syncthreads();
 
+    // Iterate over BK-wide chunks of k
     for (int i = 0; i < K / BK; i++) {
-        int cur = i % 2;  // the buffer that holds tile i
+        int cur = i % 2;  // the buffer that holds chunk i
 
-        // start loading tile i + 1. The loop over k doesn't read a4 and b4,
-        // so the loads arrive while the thread computes
-        if (i + 1 < K / BK) load_tiles(i + 1, a4, b4);
+        // Start loading chunk i + 1 from global memory into registers.
+        // The math below doesn't read those registers, so the loads arrive while the thread computes
+        // ... a4, b4 = this thread's float4s of chunk i + 1 ...
 
-        // the loop over k is the same as in kernel 7, but it reads s_A[cur] and s_B[cur]
-        ...
+        // ... the loop over k of kernel 7, reading s_A[cur] and s_B[cur] ...
 
-        // store tile i + 1 into the other buffer, which no thread reads at this step
-        if (i + 1 < K / BK) store_tiles(s_A[1 - cur], s_B[1 - cur], a4, b4);
+        // Store chunk i + 1 into the other buffer, which no thread reads at this step
+        // ... s_A[1 - cur], s_B[1 - cur] = a4, b4 ...
 
-        // one wait per step
+        // One wait per step instead of two
         __syncthreads();
     }
     ...
@@ -1408,42 +1341,33 @@ Kernel 9 changes where each thread's elements sit, and its tile of `C` is 128 by
 I tried 268 layouts of tiles, warp pieces and squares, with BK of 8, 16 or 32, each with and without the launch bound. The layout above with BK = 16 and the bound tied for fastest with a 64 by 256 tile. Here are the parts of the kernel that change:
 
 ```cpp
-#define WM 32      // each warp computes a WM x WN piece of the C tile
-#define WN 64
-#define TM 4       // each thread computes WMITER x WNITER squares of TM x TN
-#define TN 4
-#define WMITER 2
-#define WNITER 2
-#define WSUBM (WM / WMITER)  // a sub-piece is WSUBM x WSUBN = 16 x 32
-#define WSUBN (WN / WNITER)
+// Split the 128 x 128 tile among the 8 warps: 4 rows of 2 pieces of 32 x 64
+int warp = tid / 32, lane = tid % 32;
+int warp_row = (warp / 2) * 32;
+int warp_col = (warp % 2) * 64;
 
-__global__ void __launch_bounds__(256, 2) sgemm_9(const float* A, const float* B, float* C, int M, int K, int N) {
-    ...
-    // which piece of the C tile this thread's warp computes
-    int warp_id = tid / 32;
-    int warp_row = (warp_id / (BN / WN)) * WM;
-    int warp_col = (warp_id % (BN / WN)) * WN;
+// Split each warp's piece into 2 x 2 sub-pieces of 16 x 32. In each sub-piece the 32 lanes
+// sit as 4 rows of 8, and each lane computes a 4 x 4 square, so neighbors compute neighbors
+int t_row = (lane / 8) * 4;
+int t_col = (lane % 8) * 4;
 
-    // where this thread's square sits inside each sub-piece: 4 rows of 8 threads,
-    // so neighboring threads compute neighboring squares
-    int lane = tid % 32;
-    int t_row = (lane / (WSUBN / TN)) * TM;
-    int t_col = (lane % (WSUBN / TN)) * TN;
-    ...
-        for (int k = 0; k < BK; k++) {
-            for (int wm = 0; wm < WMITER; wm++)
-                for (int m = 0; m < TM; m++)
-                    reg_A[wm * TM + m] = s_A[cur][k][warp_row + wm * WSUBM + t_row + m];
-            for (int wn = 0; wn < WNITER; wn++)
-                for (int n = 0; n < TN; n++)
-                    reg_B[wn * TN + n] = s_B[cur][k][warp_col + wn * WSUBN + t_col + n];
-            // 8 x 8 FFMAs from 8 + 8 numbers
-            for (int m = 0; m < WMITER * TM; m++)
-                for (int n = 0; n < WNITER * TN; n++)
-                    results[m][n] += reg_A[m] * reg_B[n];
-        }
-    ...
-}
+// ... Iterate over BK-wide chunks of k with the two buffers of kernel 8 ...
+    for (int k = 0; k < BK; k++) {
+        // Read this lane's 4 numbers of s_A in each of the 2 sub-pieces along m, 16 rows apart
+        for (int wm = 0; wm < 2; wm++)
+            for (int m = 0; m < 4; m++)
+                reg_A[wm * 4 + m] = s_A[cur][k][warp_row + wm * 16 + t_row + m];
+        // Read this lane's 4 numbers of s_B in each of the 2 sub-pieces along n, 32 columns apart
+        for (int wn = 0; wn < 2; wn++)
+            for (int n = 0; n < 4; n++)
+                reg_B[wn * 4 + n] = s_B[cur][k][warp_col + wn * 32 + t_col + n];
+
+        // 8 x 8 FFMAs from 8 + 8 numbers
+        for (int m = 0; m < 8; m++)
+            for (int n = 0; n < 8; n++)
+                results[m][n] += reg_A[m] * reg_B[n];
+    }
+// ... write registers results[..][..] to C ...
 ```
 
 <details markdown="1">
