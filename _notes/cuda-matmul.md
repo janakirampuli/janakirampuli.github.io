@@ -1,7 +1,7 @@
 ---
 layout: notes
 title: "CUDA kernels and matrix multiplication"
-description: "Writing GPU programs in CUDA: threads, blocks and grids in code, what the compiler makes of a kernel, how to time one, and the first matrix multiplication kernels measured on a B200."
+description: "Writing GPU programs in CUDA: threads, blocks and grids in code, what the compiler makes of a kernel, and eleven matrix multiplication kernels on a B200, from a naive kernel to about 90% of cuBLAS."
 date: 2026-11-22
 tags: ["gpu", "cuda", "matmul"]
 project: gpu-programming
@@ -12,7 +12,7 @@ extra_css:
   - /assets/css/gpu.css
 ---
 
-This work log is completely inspired by [Simon Boehm's blog](https://siboehm.com/articles/22/CUDA-MMM), and all the techniques here are from his work log.
+The work in this log is inspired by the blogs of [Simon Boehm](https://siboehm.com/articles/22/CUDA-MMM) and [Aleksa Gordić](https://www.aleksagordic.com/blog/matmul).
 
 ## Contents
 
@@ -33,6 +33,9 @@ This work log is completely inspired by [Simon Boehm's blog](https://siboehm.com
 - [Kernel 7: transposing s_A](#kernel-7-transposing-s_a)
 - [Kernel 8: double buffering](#kernel-8-double-buffering)
 - [Kernel 9: warp tiling](#kernel-9-warp-tiling)
+- [Kernel 10: two multiply-adds in one instruction](#kernel-10-two-multiply-adds-in-one-instruction)
+- [Kernel 11: loading the next numbers ahead](#kernel-11-loading-the-next-numbers-ahead)
+- [Where kernel 11 ends up](#where-kernel-11-ends-up)
 - [Results](#results)
 - [References](#references)
 
@@ -40,7 +43,7 @@ This work log is completely inspired by [Simon Boehm's blog](https://siboehm.com
 
 ## A kernel
 
-A kernel is a function that runs on the GPU. The CPU starts it with a grid of blocks, and every thread in every block runs the whole function, so each thread needs a way to find its own part of the work. CUDA gives each thread four built-in values for that:
+A kernel is a function that runs on the GPU. The CPU [starts it]({{ '/notes/gpu.html#what-happens-when-the-cpu-starts-a-kernel' | relative_url }}) with a grid of blocks, and every thread in every block runs the whole function, so each thread needs a way to find its own part of the work. CUDA gives each thread four built-in values for that:
 
 - `threadIdx` is the position of the thread inside its block.
 - `blockIdx` is the position of the block inside the grid.
@@ -121,7 +124,7 @@ STG.E        desc[UR4][R4.64], R7            store the new y[i]
 EXIT
 ```
 
-Each thread runs every instruction in the listing. The GPU runs the threads of a block in groups of 32, called warps, and the 32 threads of a warp run each instruction together. The values `c[0x0][...]` come from a small read-only memory called constant memory. It holds the kernel's arguments `n`, `a`, `x` and `y` and the block size, and every thread reads the same values from it. `LDC` and `LDCU` load these values into registers, and a register whose name starts with `UR` is a uniform register, which holds one value for the whole warp, e.g., `blockIdx.x` or `a`. The `desc[UR4]` in a load or a store is a memory descriptor, which one of the setup instructions puts into `UR4` once `blockIdx.x` is no longer needed. The `0x4` is the size of a 32-bit number in bytes.
+Each thread runs every instruction in the listing. The GPU runs the threads of a block in groups of 32, called warps, and the 32 threads of a warp run each instruction together. The values `c[0x0][...]` come from a small read-only memory called constant memory, which holds the kernel's arguments `n`, `a`, `x` and `y` and the block size.
 
 The kernel does two loads and one store for each `FFMA`, so it is [memory bound]({{ '/notes/gpu.html#memory-bandwidth' | relative_url }}).{% include components/sidenote.html id="sn-ffma" label="1" text="`FFMA` is a fused multiply-add. It computes `x[i] · a + y[i]` in one instruction and rounds the result only once. The listed FP32 speed of a GPU counts each `FFMA` as 2 operations, so the speed is 2 × FP32 cores × clock." %}
 
@@ -170,9 +173,9 @@ __global__ void sgemm_1(const float* A, const float* B, float* C, int M, int K, 
     if (i < M && j < N) {
         float tmp = 0.0f;
         for (int k = 0; k < K; k++) {
-            tmp += A[k + K * i] * B[k * N + j];
+            tmp += A[i * K + k] * B[k * N + j];
         }
-        C[j + i * N] = tmp;
+        C[i * N + j] = tmp;
     }
 }
 ```
@@ -187,7 +190,7 @@ sgemm_1<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);
 
 Each block has 32 by 32 threads, and `ceil_div` divides and rounds up, so the grid has a thread for every element of `C`. Each thread keeps its running sum in a register and writes to `C` only once at the end.
 
-4096 is a multiple of 32, so every thread of the grid has an element to compute. With M = 4100, the grid would need one more row of blocks for the last 4 rows of `C`, and 28 of the 32 rows of threads in those blocks would have nothing to do. Work lost at the edges of the grid like this is called tile quantization, and it grows with the size of the tile.
+4096 is a multiple of 32, so every thread of the grid has an element to compute. With M = 4100, the grid would need one more row of blocks for the last 4 rows of `C`, and 28 of the 32 rows of threads in those blocks would have nothing to do.
 
 | Block | Time (ms) | TFLOPS | % of cuBLAS |
 |---|---|---|---|
@@ -237,9 +240,7 @@ Each block computes one square tile of `C`. The rows of that tile need the same 
 3. Each thread multiplies its row of the `A` tile with its column of the `B` tile, and adds the result to its sum.
 4. The block moves to the next tile of each strip, which is to the right in `A` and down in `B`.
 
-[![Kernel 3 at step i = 1: the block computes one tile of C. Tile i of its strip of A is in shared memory as s_A and tile i of its strip of B as s_B. Row ty of s_A and column tx of s_B line up with element (tx, ty) of the C tile. At the next step, the tile of A moves right and the tile of B moves down, and after the last step the C tile holds the sum of all the tile products]({{ '/assets/images/matmul-kernel3.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/matmul-kernel3.svg' | relative_url }})
-
-Each element of `C` is a sum over `k`, and each pair of tiles covers one stretch of `k`, so each step adds one part of every sum in the tile. When the block reaches the end of the strips, each thread has added all the parts, and its sum is its element of `C`.
+[![Kernel 3 at step i = 1: the block computes one tile of C. Tile i of its strip of A is in shared memory as s_A and tile i of its strip of B as s_B. Row ty of s_A and column tx of s_B line up with the element in row ty and column tx of the C tile. At the next step, the tile of A moves right and the tile of B moves down, and after the last step the C tile holds the sum of all the tile products]({{ '/assets/images/matmul-kernel3.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/matmul-kernel3.svg' | relative_url }})
 
 Here is the kernel with 32 by 32 tiles:
 
@@ -263,8 +264,8 @@ __global__ void sgemm_3(const float* A, const float* B, float* C, int M, int K, 
         // so both tiles are complete before any thread reads them
         __syncthreads();
 
-        for (int j = 0; j < 32; j++) {
-            sum += s_A[ty][j] * s_B[j][tx];
+        for (int k = 0; k < 32; k++) {
+            sum += s_A[ty][k] * s_B[k][tx];
         }
 
         // every thread is done with the tiles before the next step overwrites them
@@ -286,122 +287,11 @@ The tile can't get bigger while each thread computes one element of `C`, because
 
 ### Operations and loads
 
-At each step, each thread does 32 `FFMA`s, one for each pair of numbers in its row of `s_A` and its column of `s_B`. Three parts of the GPU each set a highest possible speed for kernel 3:
+At each step, each thread does 32 `FFMA`s, one for each pair of numbers in its row of `s_A` and its column of `s_B`. Three parts of the GPU each set a highest speed for kernel 3:
 
-1. The FP32 cores. If they ran an `FFMA` in every cycle, the kernel would reach the full FP32 speed of 74.45 TFLOPS.
-2. Global memory. At each step, each thread loads two numbers from global memory, one for `s_A` and one for `s_B`, which is 8 bytes. It then does 32 `FFMA`s, which is 64 FLOPs, so kernel 3 does 64 / 8 = 8 FLOPs for each byte that it loads, which is 32 times the 0.25 FLOPs per byte of kernel 2. The factor of 32 comes from sharing, because each number in `s_A` is used by the 32 threads in its row of the tile, and each number in `s_B` by the 32 threads in its column. Even if every load went to HBM, the ridge point graph would allow 8 × 7,672 GB per second = 61.4 TFLOPS, and the L2 cache serves many of the loads, so the limit is higher.
-3. Shared memory. The counts below are for one warp. One warp load from shared memory gives one number to each of the 32 threads, which is 32 numbers. In the compiled code, a warp runs these instructions at each step:
-   - 32 `FFMA`s.
-   - 32 loads from `s_B`. Each one gives every thread the next number of its column.
-   - 8 loads from `s_A`. Each one gives every thread four numbers of its row at once.
-
-   The 128 FP32 cores of an SM finish 4 warp `FFMA`s per cycle, so the 32 `FFMA`s need 8 cycles. Shared memory has 32 banks that each give out one 4-byte number per cycle, which is 32 numbers per cycle, or one warp load of one number for each thread. On the B200, a load of four numbers for each thread takes 2 cycles, even when all 32 threads read the same four numbers, so the 40 loads need about 32 + 8 × 2 = 48 cycles. While shared memory works through those 48 cycles, the FP32 cores are busy for only 8 of them, so the kernel can reach at most 8 / 48 = 17% of the FP32 speed, or about 12.4 TFLOPS.
-
-<details markdown="1">
-<summary>SASS of one step of the loop</summary>
-
-Kernel 3 for the B200 (`-O3 -arch=sm_100`), from `cuobjdump -sass`. It was compiled with the bounds checks, which add the `ISETP` and `@!P` instructions at the top. The two `LDG` loads and two `STS` stores copy the tiles, the two `BAR` instructions are the `__syncthreads()` calls, and between them are the 32 `LDS`, 8 `LDS.128` and 32 `FFMA` instructions.
-
-```
-.L_x_1:
-ISETP.GE.AND P1, PT, R17, UR13, PT
-HFMA2 R24, -RZ, RZ, 0, 0
-ISETP.GE.AND P0, PT, R16, UR13, PT
-ISETP.GE.OR P1, PT, R18, UR12, P1
-ISETP.GE.OR P0, PT, R19, R0, P0
-MOV R29, RZ
-@!P1 LDC.64 R10, c[0x0][0x380]
-@!P0 LDC.64 R8, c[0x0][0x388]
-@!P1 IMAD.WIDE.U32 R10, R6, 0x4, R10
-@!P1 LDG.E R29, desc[UR8][R10.64]
-@!P0 IMAD.WIDE R22, R7, 0x4, R8
-@!P0 LDG.E R24, desc[UR8][R22.64]
-UIADD3 UR4, UPT, UPT, UR4, 0x1, URZ
-UISETP.NE.U32.AND UP0, UPT, UR4, URZ, UPT
-IADD3 R16, PT, PT, R16, 0x20, RZ
-STS [R4], R29
-STS [R2], R24
-BAR.SYNC.DEFER_BLOCKING 0x0
-LDS R28, [R3]
-LDS.128 R12, [R5]
-LDS R23, [R3+0x80]
-LDS R27, [R3+0x100]
-LDS R26, [R3+0x180]
-LDS R25, [R3+0x200]
-LDS.128 R8, [R5+0x10]
-LDS R20, [R3+0x280]
-LDS R24, [R3+0x380]
-LDS R22, [R3+0x480]
-FFMA R12, R12, R28, R21
-LDS R21, [R3+0x300]
-FFMA R12, R23, R13, R12
-LDS R23, [R3+0x400]
-FFMA R27, R27, R14, R12
-FFMA R27, R26, R15, R27
-LDS.128 R12, [R5+0x20]
-LDS R26, [R3+0x580]
-FFMA R27, R8, R25, R27
-LDS R25, [R3+0x500]
-FFMA R20, R20, R9, R27
-FFMA R21, R21, R10, R20
-LDS R20, [R3+0x680]
-FFMA R27, R24, R11, R21
-LDS R21, [R3+0x600]
-LDS.128 R8, [R5+0x30]
-FFMA R27, R12, R23, R27
-LDS R23, [R3+0x700]
-FFMA R22, R22, R13, R27
-LDS R24, [R3+0x780]
-FFMA R25, R25, R14, R22
-LDS R22, [R3+0x880]
-FFMA R27, R26, R15, R25
-LDS R25, [R3+0x800]
-LDS.128 R12, [R5+0x40]
-LDS R26, [R3+0x980]
-FFMA R27, R8, R21, R27
-LDS R21, [R3+0x900]
-FFMA R20, R20, R9, R27
-FFMA R23, R23, R10, R20
-LDS R20, [R3+0xa80]
-FFMA R27, R24, R11, R23
-LDS R23, [R3+0xa00]
-LDS.128 R8, [R5+0x50]
-FFMA R27, R12, R25, R27
-LDS R25, [R3+0xb00]
-FFMA R12, R22, R13, R27
-LDS R22, [R3+0xb80]
-LDS R24, [R3+0xc80]
-FFMA R21, R21, R14, R12
-FFMA R27, R26, R15, R21
-LDS R21, [R3+0xc00]
-LDS.128 R12, [R5+0x60]
-FFMA R23, R8, R23, R27
-FFMA R20, R20, R9, R23
-LDS R23, [R3+0xd00]
-FFMA R25, R25, R10, R20
-LDS R20, [R3+0xd80]
-FFMA R27, R22, R11, R25
-LDS R25, [R3+0xe00]
-LDS.128 R8, [R5+0x70]
-LDS R22, [R3+0xe80]
-FFMA R27, R12, R21, R27
-LDS R21, [R3+0xf00]
-LDS R12, [R3+0xf80]
-FFMA R24, R24, R13, R27
-FFMA R23, R23, R14, R24
-FFMA R15, R20, R15, R23
-FFMA R15, R8, R25, R15
-FFMA R22, R22, R9, R15
-IADD3 R17, PT, PT, R17, 0x20, RZ
-IADD3 R6, PT, PT, R6, 0x20, RZ
-LEA R7, R0, R7, 0x5
-FFMA R21, R21, R10, R22
-FFMA R21, R12, R11, R21
-BAR.SYNC.DEFER_BLOCKING 0x0
-BRA.U UP0, `(.L_x_1)
-```
-
-</details>
+- The FP32 cores allow the full FP32 speed of 74.45 TFLOPS.
+- Global memory allows almost as much. Each number that a block copies into shared memory is used by 32 threads, so kernel 3 does 8 FLOPs for each byte that it loads, 32 times as many as kernel 2. 8 FLOPs per byte is close to the ridge point, and the L2 cache serves many of the loads.
+- Shared memory allows the least. For each `FFMA`, a thread also loads a number of `s_B` from shared memory, and shared memory serves those loads much more slowly than the FP32 cores run the `FFMA`s. For one warp, the 32 `FFMA`s of a step take 8 cycles of the FP32 cores and about 48 cycles of shared memory.
 
 | Limit | Highest speed |
 |---|---|
@@ -456,11 +346,7 @@ for (int k0 = 0; k0 < K; k0 += BK) {
 // ... write registers results[..] to C ...
 ```
 
-The grid has one block for each tile of `C`.
-
-A warp is 32 threads with neighboring `tx` and the same `ty`, so it covers 32 neighboring columns of the tile and the same 16 rows. Its copy into `s_B` reads 32 neighboring numbers in one row of `B`, which is coalesced. Its copy into `s_A` reads 8 rows of `A` with 4 neighboring numbers in each, so it needs one sector for each row and uses half of each sector.
-
-Kernel 4 took 6.35 ms, which is 21.65 TFLOPS and 2.10 times faster than kernel 3. I also tried columns of 4, 8 and 32 results, each with BK = 64 / TM, and they took 9.86, 7.72 and 7.48 ms.
+Kernel 4 took 6.35 ms, which is 21.65 TFLOPS and 2.10 times faster than kernel 3.
 
 ### How much of an SM a block uses
 
@@ -479,259 +365,9 @@ At each step, which covers 4 values of `k`, one warp:
   - 4 loads from `s_B`, one for each `k`, which take 1 cycle each.
   - 16 loads from `s_A`, one for each row of results. Each one reads the 4 neighboring numbers of one row of `s_A` and takes 2 cycles. All 32 threads of a warp compute the same rows, so each of these loads gives the same 4 numbers to every thread.
 
-[![Busy time of one warp for 64 FFMAs. The FP32 cores need 16 cycles. Shared memory needs 96 cycles in kernel 3 and 36 cycles in kernel 4, so it still takes longer than the FP32 cores in both]({{ '/assets/images/kernel4-busy.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel4-busy.svg' | relative_url }})
+[![Busy time of one warp for 64 FFMAs. The FP32 cores need 16 cycles. Shared memory needs 96 cycles in kernel 3, which is 2 steps of 48, and 36 cycles in kernel 4, so it still takes longer than the FP32 cores in both]({{ '/assets/images/kernel4-busy.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel4-busy.svg' | relative_url }})
 
 Shared memory still takes longer than the FP32 cores, so it still sets the limit, but by much less than in kernel 3. Global memory doesn't set the limit, because each number that a block copies into shared memory is now used for 64 elements of `C` instead of 32. Kernel 4 does twice as many FLOPs for each byte as kernel 3, which puts it above the ridge point.
-
-<details markdown="1">
-<summary>SASS of one step of the loop</summary>
-
-Kernel 4 for the B200 (`-O3 -arch=sm_100`), from `cuobjdump -sass`. It was compiled with the bounds checks, which add the `ISETP` and `@!P` instructions. The compiler handles two steps in each pass, so the listing shows two steps: 4 `LDG` loads and 4 `STS` stores copy the tiles, the 4 `BAR` instructions are the `__syncthreads()` calls, and between them are 8 `LDS`, 32 `LDS.128` and 128 `FFMA` instructions. `.L_x_2` is the code after the loop. The `.reuse` flag on an `FFMA` tells the GPU to keep that number close to the cores for the next `FFMA`, so the next one doesn't read it from the registers again.
-
-```
-LDC R12, c[0x0][0x3a0]
-LDCU UR4, c[0x0][0x398]
-LEA R4, R3, R0.reuse, 0x6
-CS2R R10, SRZ
-LOP3.LUT R45, R0, 0x3, RZ, 0xc0, !PT
-SHF.R.U32.HI R9, RZ, 0x2, R4
-LEA R43, R41, R0, 0x6
-ISETP.GE.AND P0, PT, R45, UR7, PT
-LEA R46, R2, R9, 0x6
-IMAD R48, R46.reuse, UR7, R45
-ISETP.GE.OR P0, PT, R46, UR4, P0
-ISETP.GE.AND P1, PT, R43, R12.reuse, PT
-IMAD R8, R3, R12, R0
-ISETP.GE.OR P1, PT, R3, UR7, P1
-LEA R13, R41, R8, 0x6
-@!P0 LDC.64 R4, c[0x0][0x380]
-@!P1 LDC.64 R6, c[0x0][0x388]
-@!P0 IMAD.WIDE.U32 R4, R48, 0x4, R4
-@!P0 LDG.E R10, desc[UR8][R4.64]
-@!P1 IMAD.WIDE R6, R13, 0x4, R6
-@!P1 LDG.E R11, desc[UR8][R6.64]
-S2UR UR6, SR_CgaCtaId
-UMOV UR4, 0x400
-UIADD3 UR5, UPT, UPT, UR4, 0x400, URZ
-ULEA UR4, UR6, UR4, 0x18
-ULEA UR5, UR6, UR5, 0x18
-LEA R8, R9, UR4, 0x4
-LEA R9, R3, UR5, 0x8
-LEA R45, R45, R8, 0x2
-LEA R44, R0.reuse, R9, 0x2
-LEA R42, R0, UR5, 0x2
-LEA R40, R3, UR4, 0x8
-UIADD3 UR4, UPT, UPT, UR7, 0x3, URZ
-USHF.R.U32.HI UR4, URZ, 0x2, UR4
-UIADD3 UR4, UPT, UPT, -UR4, 0x1, URZ
-UISETP.NE.U32.AND UP0, UPT, UR4, URZ, UPT
-STS [R45], R10
-STS [R44], R11
-BAR.SYNC.DEFER_BLOCKING 0x0
-LDS R57, [R42]
-LDS.128 R36, [R40]
-LDS.128 R16, [R40+0x10]
-LDS R50, [R42+0x100]
-LDS.128 R20, [R40+0x20]
-LDS R55, [R42+0x200]
-LDS R52, [R42+0x300]
-LDS.128 R24, [R40+0x30]
-LDS.128 R4, [R40+0x50]
-LDS.128 R28, [R40+0x40]
-LDS.128 R32, [R40+0x70]
-FFMA R9, R57.reuse, R36, RZ
-FFMA R16, R57, R16, RZ
-FFMA R14, R50.reuse, R37, R9
-FFMA R17, R50, R17, R16
-LDS.128 R8, [R40+0x60]
-FFMA R20, R57, R20, RZ
-LEA R36, R12, R13, 0x2
-FFMA R21, R50, R21, R20
-FFMA R37, R55.reuse, R38, R14
-FFMA R18, R55.reuse, R18, R17
-LDS.128 R12, [R40+0x80]
-FFMA R22, R55, R22, R21
-FFMA R39, R52.reuse, R39, R37
-FFMA R37, R52.reuse, R19, R18
-FFMA R21, R57, R24, RZ
-LDS.128 R16, [R40+0x90]
-FFMA R47, R52, R23, R22
-FFMA R24, R50, R25, R21
-LDS.128 R20, [R40+0xa0]
-FFMA R4, R57, R4, RZ
-FFMA R4, R50, R5, R4
-FFMA R25, R57, R28, RZ
-FFMA R51, R55, R6, R4
-FFMA R25, R50, R29, R25
-FFMA R5, R57, R8, RZ
-FFMA R4, R50, R9, R5
-FFMA R5, R57, R32, RZ
-FFMA R29, R55, R10, R4
-FFMA R12, R57, R12, RZ
-FFMA R8, R50, R33, R5
-FFMA R49, R55, R26, R24
-FFMA R33, R52, R11, R29
-FFMA R13, R50, R13, R12
-FFMA R9, R57, R16, RZ
-FFMA R11, R55.reuse, R34, R8
-FFMA R30, R55, R30, R25
-FFMA R51, R52, R7, R51
-FFMA R8, R50, R17, R9
-FFMA R9, R57, R20, RZ
-LDS.128 R4, [R40+0xc0]
-FFMA R14, R55, R14, R13
-FFMA R49, R52, R27, R49
-LDS.128 R24, [R40+0xb0]
-FFMA R53, R52.reuse, R31, R30
-FFMA R35, R52, R35, R11
-FFMA R17, R55.reuse, R18, R8
-FFMA R16, R50, R21, R9
-FFMA R32, R52, R15, R14
-LDS.128 R28, [R40+0xd0]
-LDS.128 R8, [R40+0xe0]
-LDS.128 R12, [R40+0xf0]
-FFMA R22, R55, R22, R16
-FFMA R4, R57.reuse, R4, RZ
-FFMA R21, R57, R24, RZ
-FFMA R4, R50.reuse, R5, R4
-FFMA R21, R50, R25, R21
-FFMA R5, R57.reuse, R28, RZ
-FFMA R25, R52, R19, R17
-FFMA R8, R57, R8, RZ
-FFMA R17, R55, R6, R4
-FFMA R12, R57, R12, RZ
-FFMA R4, R50.reuse, R29, R5
-FFMA R9, R50.reuse, R9, R8
-FFMA R13, R50, R13, R12
-FFMA R26, R55.reuse, R26, R21
-FFMA R4, R55.reuse, R30, R4
-FFMA R10, R55.reuse, R10, R9
-FFMA R14, R55, R14, R13
-FFMA R27, R52.reuse, R27, R26
-FFMA R24, R52.reuse, R23, R22
-FFMA R29, R52.reuse, R7, R17
-FFMA R31, R52.reuse, R31, R4
-FFMA R26, R52.reuse, R11, R10
-FFMA R52, R52, R15, R14
-BAR.SYNC.DEFER_BLOCKING 0x0
-BRA.U !UP0, `(.L_x_2)
-LOP3.LUT R30, R0, 0x3, RZ, 0xc0, !PT
-LDCU.64 UR6, c[0x0][0x398]
-MOV R38, R36
-IADD3 R34, PT, PT, R48, 0x4, RZ
-IADD3 R36, PT, PT, R3, 0x4, RZ
-IADD3 R30, PT, PT, R30, 0x4, RZ
-.L_x_1:
-LDC R28, c[0x0][0x3a0]
-ISETP.GE.AND P0, PT, R30, UR7, PT
-CS2R R54, SRZ
-ISETP.GE.OR P1, PT, R46, UR6, P0
-@!P1 LDC.64 R6, c[0x0][0x380]
-ISETP.GE.AND P2, PT, R43, R28, PT
-ISETP.GE.OR P0, PT, R36, UR7, P2
-@!P0 LDC.64 R4, c[0x0][0x388]
-@!P1 IMAD.WIDE.U32 R6, R34, 0x4, R6
-@!P1 LDG.E R54, desc[UR8][R6.64]
-@!P0 IMAD.WIDE R4, R38, 0x4, R4
-@!P0 LDG.E R55, desc[UR8][R4.64]
-UIADD3 UR4, UPT, UPT, UR4, 0x1, URZ
-UISETP.NE.U32.AND UP0, UPT, UR4, URZ, UPT
-LEA R38, R28, R38, 0x2
-IADD3 R30, PT, PT, R30, 0x4, RZ
-IADD3 R36, PT, PT, R36, 0x4, RZ
-IADD3 R34, PT, PT, R34, 0x4, RZ
-STS [R45], R54
-STS [R44], R55
-BAR.SYNC.DEFER_BLOCKING 0x0
-LDS R50, [R42]
-LDS.128 R12, [R40+0x10]
-LDS R48, [R42+0x100]
-LDS R54, [R42+0x200]
-LDS R56, [R42+0x300]
-LDS.128 R20, [R40+0x30]
-LDS.128 R8, [R40]
-LDS.128 R16, [R40+0x20]
-LDS.128 R4, [R40+0x40]
-FFMA R37, R50, R12, R37
-FFMA R13, R48, R13, R37
-FFMA R14, R54, R14, R13
-FFMA R37, R56, R15, R14
-LDS.128 R12, [R40+0x50]
-FFMA R20, R50, R20, R49
-FFMA R21, R48, R21, R20
-FFMA R39, R50, R8, R39
-FFMA R22, R54, R22, R21
-FFMA R16, R50.reuse, R16, R47
-FFMA R53, R50, R4, R53
-FFMA R9, R48.reuse, R9, R39
-FFMA R17, R48, R17, R16
-FFMA R49, R56, R23, R22
-FFMA R5, R48, R5, R53
-LDS.128 R20, [R40+0x70]
-FFMA R9, R54.reuse, R10, R9
-FFMA R18, R54.reuse, R18, R17
-FFMA R5, R54, R6, R5
-FFMA R39, R56.reuse, R11, R9
-FFMA R47, R56.reuse, R19, R18
-FFMA R53, R56, R7, R5
-LDS.128 R16, [R40+0x60]
-LDS.128 R8, [R40+0x80]
-LDS.128 R4, [R40+0x90]
-FFMA R51, R50, R12, R51
-FFMA R13, R48, R13, R51
-FFMA R14, R54, R14, R13
-FFMA R51, R56, R15, R14
-LDS.128 R12, [R40+0xa0]
-FFMA R20, R50, R20, R35
-FFMA R21, R48, R21, R20
-FFMA R22, R54, R22, R21
-FFMA R16, R50.reuse, R16, R33
-FFMA R21, R50.reuse, R8, R32
-FFMA R25, R50, R4, R25
-FFMA R17, R48.reuse, R17, R16
-FFMA R9, R48.reuse, R9, R21
-FFMA R5, R48, R5, R25
-FFMA R18, R54.reuse, R18, R17
-FFMA R9, R54.reuse, R10, R9
-FFMA R6, R54, R6, R5
-FFMA R12, R50, R12, R24
-FFMA R13, R48, R13, R12
-FFMA R14, R54, R14, R13
-FFMA R33, R56.reuse, R19, R18
-FFMA R35, R56.reuse, R23, R22
-FFMA R32, R56.reuse, R11, R9
-FFMA R25, R56.reuse, R7, R6
-FFMA R24, R56, R15, R14
-LDS.128 R16, [R40+0xb0]
-LDS.128 R20, [R40+0xc0]
-LDS.128 R4, [R40+0xd0]
-LDS.128 R8, [R40+0xe0]
-LDS.128 R12, [R40+0xf0]
-FFMA R16, R50.reuse, R16, R27
-FFMA R29, R50.reuse, R20, R29
-FFMA R31, R50.reuse, R4, R31
-FFMA R8, R50.reuse, R8, R26
-FFMA R12, R50, R12, R52
-FFMA R17, R48.reuse, R17, R16
-FFMA R21, R48.reuse, R21, R29
-FFMA R5, R48.reuse, R5, R31
-FFMA R9, R48.reuse, R9, R8
-FFMA R13, R48, R13, R12
-FFMA R18, R54.reuse, R18, R17
-FFMA R21, R54.reuse, R22, R21
-FFMA R5, R54.reuse, R6, R5
-FFMA R10, R54.reuse, R10, R9
-FFMA R14, R54, R14, R13
-FFMA R27, R56.reuse, R19, R18
-FFMA R29, R56.reuse, R23, R21
-FFMA R31, R56.reuse, R7, R5
-FFMA R26, R56.reuse, R11, R10
-FFMA R52, R56, R15, R14
-BAR.SYNC.DEFER_BLOCKING 0x0
-BRA.U UP0, `(.L_x_1)
-```
-
-</details>
 
 Nsight Compute, NVIDIA's profiler, measures where the time of a kernel goes. For kernel 4 it shows:
 
@@ -779,7 +415,7 @@ for (int k0 = 0; k0 < K; k0 += BK) {
 // ... write registers results[..][..] to C ...
 ```
 
-Kernel 5 took 5.53 ms, which is 24.86 TFLOPS and 1.15 times faster than kernel 4. With one copy for each thread, the tile has to be square and BK = BM / (TM × TN), which leaves only a few sizes. I tried 8 of them, and 64 by 64 with 4 by 4 squares ran fastest. A 128 by 128 tile with 8 by 4 squares, for example, took 7.54 ms, because its 80 registers for each thread let only one block of 512 threads fit on an SM.
+Kernel 5 took 5.53 ms, which is 24.86 TFLOPS and 1.15 times faster than kernel 4.
 
 ### How much of an SM a block uses
 
@@ -797,256 +433,26 @@ At each `k`, each thread does 16 `FFMA`s, and it needs 4 numbers of `s_A` and 4 
 - Nsight Compute measures 3 cycles of shared memory for each of these loads on average, so 64 `FFMA`s need 24 cycles of shared memory and 16 cycles of the FP32 cores.
 - The tile of `C` has the same size as in kernel 4, so global memory does the same number of FLOPs for each byte, which is above the ridge point.
 
-[![Busy time of one warp for 64 FFMAs. The FP32 cores need 16 cycles in each kernel. Shared memory needs 96 cycles in kernel 3, 36 in kernel 4 and 24 in kernel 5, so it still takes longer than the FP32 cores in all three]({{ '/assets/images/kernel5-busy.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel5-busy.svg' | relative_url }})
+[![Busy time of one warp for 64 FFMAs. The FP32 cores need 16 cycles in each kernel. Shared memory needs 96 cycles in kernel 3, which is 2 steps of 48, 36 in kernel 4 and 24 in kernel 5, so it still takes longer than the FP32 cores in all three]({{ '/assets/images/kernel5-busy.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel5-busy.svg' | relative_url }})
 
-<details markdown="1">
-<summary>SASS of one step of the loop</summary>
-
-Kernel 5 for the B200 (`-O3 -arch=sm_100`), from `cuobjdump -sass`, compiled with the bounds checks. The compiler handles two steps in each pass, so the listing shows two steps: 4 `LDG` loads and 4 `STS` stores copy the tiles, the 4 `BAR` instructions are the `__syncthreads()` calls, and between them 16 `LDS.128` loads feed 128 `FFMA`s. `.L_x_2` is the code after the loop.
-
-```
-LDC R42, c[0x0][0x3a0]
-LDCU UR5, c[0x0][0x398]
-LEA R8, R2, R0, 0x4
-LOP3.LUT R40, R0, 0x3, RZ, 0xc0, !PT
-LOP3.LUT R41, R8, 0x3f, RZ, 0xc0, !PT
-SHF.R.U32.HI R10, RZ, 0x2, R8
-IADD3 R23, PT, PT, R41, UR4, RZ
-ISETP.GE.AND P0, PT, R40, UR8, PT
-LEA R37, R3, R10, 0x6
-SHF.R.U32.HI R38, RZ, 0x6, R8
-MOV R29, RZ
-IMAD R39, R37.reuse, UR8, R40
-ISETP.GE.OR P0, PT, R37, UR5, P0
-MOV R31, RZ
-ISETP.GE.AND P1, PT, R23, R42.reuse, PT
-IMAD R12, R38, R42, UR4
-ISETP.GE.OR P1, PT, R38, UR8, P1
-IADD3 R41, PT, PT, R41, R12, RZ
-@!P0 LDC.64 R4, c[0x0][0x380]
-@!P1 LDC.64 R6, c[0x0][0x388]
-@!P0 IMAD.WIDE.U32 R4, R39, 0x4, R4
-@!P0 LDG.E R29, desc[UR10][R4.64]
-@!P1 IMAD.WIDE R6, R41, 0x4, R6
-@!P1 LDG.E R31, desc[UR10][R6.64]
-S2UR UR7, SR_CgaCtaId
-UMOV UR5, 0x400
-UIADD3 UR6, UPT, UPT, UR5, 0x400, URZ
-SHF.L.U32 R8, R8, 0x2, RZ
-LOP3.LUT R11, R8, 0xfc, RZ, 0xc0, !PT
-ULEA UR5, UR7, UR5, 0x18
-ULEA UR6, UR7, UR6, 0x18
-LEA R9, R10, UR5, 0x4
-LEA R22, R38, UR6, 0x8
-LEA R36, R40, R9, 0x2
-IADD3 R22, PT, PT, R22, R11, RZ
-LEA R20, R2, UR5, 0x6
-LEA R21, R0, UR6, 0x4
-UIADD3 UR5, UPT, UPT, UR8, 0x3, URZ
-USHF.R.U32.HI UR5, URZ, 0x2, UR5
-UIADD3 UR5, UPT, UPT, -UR5, 0x1, URZ
-LEA R41, R42, R41, 0x2
-UISETP.NE.U32.AND UP0, UPT, UR5, URZ, UPT
-STS [R36], R29
-STS [R22], R31
-BAR.SYNC.DEFER_BLOCKING 0x0
-LDS.128 R12, [R20]
-LDS.128 R32, [R21]
-LDS.128 R8, [R20+0x10]
-LDS.128 R24, [R21+0x100]
-LDS.128 R4, [R20+0x20]
-LDS.128 R16, [R20+0x30]
-FFMA R47, R12.reuse, R32, RZ
-FFMA R28, R12.reuse, R33, RZ
-FFMA R43, R12.reuse, R34, RZ
-FFMA R12, R12, R35, RZ
-FFMA R44, R8.reuse, R33, RZ
-FFMA R51, R8, R32, RZ
-FFMA R47, R24, R13, R47
-FFMA R45, R13.reuse, R25, R28
-FFMA R43, R13.reuse, R26, R43
-FFMA R12, R13, R27, R12
-FFMA R13, R8.reuse, R34, RZ
-FFMA R8, R8, R35, RZ
-FFMA R49, R9.reuse, R25, R44
-FFMA R44, R4.reuse, R33, RZ
-FFMA R53, R4.reuse, R32, RZ
-FFMA R46, R4.reuse, R34, RZ
-FFMA R48, R4, R35, RZ
-LDS.128 R28, [R21+0x200]
-FFMA R51, R24.reuse, R9, R51
-FFMA R13, R9.reuse, R26.reuse, R13
-FFMA R8, R9, R27, R8
-FFMA R9, R5.reuse, R25, R44
-FFMA R53, R24, R5, R53
-FFMA R4, R5.reuse, R26, R46
-FFMA R44, R5, R27, R48
-FFMA R5, R16.reuse, R32, RZ
-FFMA R48, R16.reuse, R33, RZ
-FFMA R46, R16.reuse, R34, RZ
-FFMA R16, R16, R35, RZ
-LDS.128 R32, [R21+0x300]
-FFMA R5, R24, R17, R5
-FFMA R25, R17.reuse, R25, R48
-FFMA R26, R17.reuse, R26, R46
-FFMA R16, R17, R27, R16
-FFMA R47, R28, R14, R47
-FFMA R42, R14.reuse, R29.reuse, R45
-FFMA R43, R14, R30, R43
-FFMA R46, R6, R29, R9
-FFMA R14, R14, R31, R12
-FFMA R53, R28, R6, R53
-FFMA R9, R6, R30, R4
-FFMA R51, R28, R10, R51
-FFMA R12, R10.reuse, R29, R49
-FFMA R13, R10.reuse, R30, R13
-FFMA R8, R10, R31.reuse, R8
-FFMA R6, R6, R31, R44
-FFMA R5, R28, R18, R5
-FFMA R4, R18.reuse, R29, R25
-FFMA R17, R18.reuse, R30, R26
-FFMA R16, R18, R31, R16
-FFMA R24, R32.reuse, R15, R47
-FFMA R26, R15.reuse, R34.reuse, R43
-FFMA R25, R15.reuse, R33, R42
-FFMA R27, R15, R35, R14
-FFMA R43, R32.reuse, R11, R51
-FFMA R44, R11.reuse, R33, R12
-FFMA R45, R11.reuse, R34.reuse, R13
-FFMA R49, R11, R35, R8
-FFMA R48, R32.reuse, R7, R53
-FFMA R46, R7.reuse, R33, R46
-FFMA R47, R7.reuse, R34.reuse, R9
-FFMA R50, R7, R35, R6
-FFMA R32, R32, R19, R5
-FFMA R33, R19.reuse, R33, R4
-FFMA R34, R19.reuse, R34, R17
-FFMA R35, R19, R35, R16
-BAR.SYNC.DEFER_BLOCKING 0x0
-BRA.U !UP0, `(.L_x_2)
-IADD3 R38, PT, PT, R38, 0x4, RZ
-LDCU.64 UR6, c[0x0][0x398]
-IADD3 R39, PT, PT, R39, 0x4, RZ
-IADD3 R40, PT, PT, R40, 0x4, RZ
-.L_x_1:
-LDC R42, c[0x0][0x3a0]
-ISETP.GE.AND P0, PT, R40, UR7, PT
-HFMA2 R9, -RZ, RZ, 0, 0
-MOV R11, RZ
-ISETP.GE.OR P1, PT, R37, UR6, P0
-@!P1 LDC.64 R6, c[0x0][0x380]
-ISETP.GE.AND P2, PT, R23, R42, PT
-ISETP.GE.OR P0, PT, R38, UR7, P2
-@!P0 LDC.64 R4, c[0x0][0x388]
-@!P1 IMAD.WIDE.U32 R6, R39, 0x4, R6
-@!P1 LDG.E R9, desc[UR10][R6.64]
-@!P0 IMAD.WIDE R52, R41, 0x4, R4
-@!P0 LDG.E R11, desc[UR10][R52.64]
-UIADD3 UR5, UPT, UPT, UR5, 0x1, URZ
-UISETP.NE.U32.AND UP0, UPT, UR5, URZ, UPT
-LEA R41, R42, R41, 0x2
-IADD3 R40, PT, PT, R40, 0x4, RZ
-IADD3 R38, PT, PT, R38, 0x4, RZ
-IADD3 R39, PT, PT, R39, 0x4, RZ
-STS [R36], R9
-STS [R22], R11
-BAR.SYNC.DEFER_BLOCKING 0x0
-LDS.128 R4, [R20]
-LDS.128 R28, [R21]
-LDS.128 R8, [R20+0x10]
-LDS.128 R12, [R20+0x20]
-LDS.128 R16, [R20+0x30]
-FFMA R51, R4.reuse, R28, R24
-FFMA R52, R4.reuse, R29, R25
-FFMA R53, R4.reuse, R30, R26
-FFMA R4, R4, R31, R27
-LDS.128 R24, [R21+0x100]
-FFMA R43, R8.reuse, R28, R43
-FFMA R44, R8.reuse, R29, R44
-FFMA R45, R8.reuse, R30, R45
-FFMA R8, R8, R31, R49
-FFMA R48, R12.reuse, R28, R48
-FFMA R46, R12.reuse, R29, R46
-FFMA R47, R12.reuse, R30, R47
-FFMA R50, R12, R31, R50
-FFMA R32, R16.reuse, R28, R32
-FFMA R12, R16.reuse, R29, R33
-FFMA R49, R16.reuse, R30, R34
-FFMA R16, R16, R31, R35
-LDS.128 R28, [R21+0x200]
-FFMA R51, R24.reuse, R5, R51
-FFMA R52, R5.reuse, R25, R52
-FFMA R53, R5.reuse, R26.reuse, R53
-FFMA R4, R5, R27, R4
-FFMA R43, R24.reuse, R9, R43
-FFMA R5, R9.reuse, R25, R44
-FFMA R45, R9.reuse, R26.reuse, R45
-FFMA R8, R9, R27, R8
-FFMA R9, R24.reuse, R13, R48
-FFMA R46, R13.reuse, R25, R46
-FFMA R47, R13.reuse, R26, R47
-FFMA R50, R13, R27, R50
-FFMA R13, R24, R17, R32
-LDS.128 R32, [R21+0x300]
-FFMA R25, R17.reuse, R25, R12
-FFMA R49, R17.reuse, R26, R49
-FFMA R16, R17, R27, R16
-FFMA R51, R28, R6, R51
-FFMA R52, R6.reuse, R29, R52
-FFMA R53, R6.reuse, R30, R53
-FFMA R4, R6, R31, R4
-FFMA R43, R28, R10, R43
-FFMA R44, R10.reuse, R29, R5
-FFMA R45, R10.reuse, R30, R45
-FFMA R8, R10, R31, R8
-FFMA R9, R28, R14, R9
-FFMA R46, R14.reuse, R29, R46
-FFMA R47, R14.reuse, R30, R47
-FFMA R50, R14, R31, R50
-FFMA R13, R28, R18, R13
-FFMA R6, R18.reuse, R29, R25
-FFMA R5, R18.reuse, R30, R49
-FFMA R16, R18, R31, R16
-FFMA R24, R32.reuse, R7, R51
-FFMA R25, R7.reuse, R33, R52
-FFMA R26, R7.reuse, R34.reuse, R53
-FFMA R27, R7, R35, R4
-FFMA R43, R32.reuse, R11, R43
-FFMA R44, R11.reuse, R33, R44
-FFMA R45, R11.reuse, R34.reuse, R45
-FFMA R49, R11, R35, R8
-FFMA R48, R32.reuse, R15, R9
-FFMA R46, R15.reuse, R33, R46
-FFMA R47, R15.reuse, R34.reuse, R47
-FFMA R50, R15, R35, R50
-FFMA R32, R32, R19, R13
-FFMA R33, R19.reuse, R33, R6
-FFMA R34, R19.reuse, R34, R5
-FFMA R35, R19, R35, R16
-BAR.SYNC.DEFER_BLOCKING 0x0
-BRA.U UP0, `(.L_x_1)
-```
-
-</details>
-
-The listing has no loops over `m`, `n` or `k`, because the compiler unrolls them. It writes out every pass of each loop as separate instructions. `reg_A`, `reg_B` and `results` can only live in registers because of the unrolling. A register has a fixed name in the instruction, so the code can't pick one with an index that changes while the program runs. Unrolling also lets the compiler start loads early. The `LDS.128` of `s_B` for the third `k` comes in the middle of the `FFMA`s for the first two, so the warp has [independent work]({{ '/notes/gpu.html#switching-between-threads' | relative_url }}) while that load is on the way.
-
-Shared memory still takes longer than the FP32 cores, but the gap is smaller than in kernel 4. Nsight Compute shows the pipe that runs the `FFMA`s busy 37% of the time and shared memory 74%. The most common reasons why a warp waits are its numbers from global memory, its numbers from shared memory and `__syncthreads()`, in that order. With BK = 4, a warp does only 64 `FFMA`s at each step between two of these waits.
+Shared memory still takes longer than the FP32 cores, but the gap is smaller than in kernel 4. Nsight Compute shows the pipe that runs the `FFMA`s busy 37% of the time and shared memory 74%. With BK = 4, a warp does only 64 `FFMA`s at each step, between its waits for memory and at `__syncthreads()`.
 
 ## Kernel 6: vectorized loads
 
-In kernel 5, each thread copies one number of `A` and one of `B` at each step. A block has 256 threads, so a tile of `A` holds 256 numbers, which is 64 rows by 4 columns, and each step covers only 4 values of `k`. A warp waits for global memory and at `__syncthreads()` once in every step, so with such short steps it spends much of its time waiting.
+In kernel 5, each thread copies one number of `A` and one number of `B` at each step, so a tile holds exactly one number for each thread. A block has 256 threads, so a tile of `A` is 64 rows by only 4 columns, and each step covers 4 values of `k`. Every step ends with a wait for global memory and the waits at `__syncthreads()`, and with such short steps a warp spends much of its time waiting.
 
-In kernel 6, each thread copies 4 neighboring numbers of a row at once:
+Kernel 6 makes the steps longer by changing only how the threads copy the tiles. The loop that computes the results stays the same as in kernel 5. The copy changes in two ways:
 
-- One vector load reads the 4 numbers from global memory, and one vector store writes them into shared memory. CUDA does both with `float4`, a type that holds four floats, so each one is a single 16-byte instruction.
-- A copy now holds 4 numbers, so a step can cover more values of `k`. When a tile holds more groups of 4 than the block has threads, each thread copies several groups, one after another.
-- Neighboring threads still copy neighboring numbers, so a warp's reads stay coalesced, as they were in kernel 5. Only the amount that each thread reads with one instruction grows.
-- The loop that computes the results is the same as in kernel 5.
+1. Each copy moves 4 neighboring numbers of a row. CUDA has a type `float4` that holds 4 floats, so one 16-byte load reads the 4 numbers from global memory, and one 16-byte store writes them into shared memory. A load that moves several numbers with one instruction is called a vector load.
+2. A thread can copy several groups of 4 at each step, one after another. A tile then doesn't have to hold one copy for each thread, so the size of the tile and BK can be chosen freely.
 
-[![How the threads of a block copy a tile of A. In kernel 5, a row of the tile takes 4 threads that copy one number each, so a step covers 4 values of k. In kernel 6, each thread copies 4 neighboring numbers with one float4 load, and a second group of 4 in the same columns 64 rows further down, so a step covers 32 values of k]({{ '/assets/images/kernel6-copy.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel6-copy.svg' | relative_url }})
+Neighboring threads still copy neighboring groups, so the reads of a warp stay coalesced.
 
-Because a thread can copy several groups, the tile doesn't have to be square, and BK doesn't depend on the number of threads. I tried 52 sizes, with tiles of 64, 128 or 256 rows and columns, squares of 4 or 8 rows and columns, and BK of 8, 16 or 32. A 128 by 128 tile with 8 by 4 squares and BK = 32 ran fastest. Here are the parts of the kernel that change. `X[r][c : + 4]` stands for 4 neighboring numbers that one 16-byte `float4` load or store moves:
+Kernel 6 uses a 128 by 128 tile with BK = 32 and 512 threads in a block, so each thread copies 2 groups of `A` and 2 groups of `B` at each step.
+
+[![One step of the loop over k has four parts. The threads copy a tile of A and a tile of B into shared memory, wait at __syncthreads(), do the math for the BK values of k in the tiles, and wait at __syncthreads() again before they move to the next tiles. A block takes K / BK steps. The second part of the figure shows what the threads copy into s_A in the first part of a step. In kernel 5, s_A is 64 rows by 4 columns, and each of the 256 threads copies one number, so a step covers 4 values of k. In kernel 6, s_A is 128 rows by 32 columns, and each of the 512 threads copies a group of 4 neighboring numbers in rows 0 to 63 and a second group in the same columns 64 rows further down, so a step covers 32 values of k. Along the first 128 values of k, kernel 5 takes 32 steps and kernel 6 takes 4]({{ '/assets/images/kernel6-copy.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel6-copy.svg' | relative_url }})
+
+Here are the parts of the kernel that change. `X[r][c : + 4]` stands for 4 neighboring numbers that one 16-byte `float4` load or store moves:
 
 ```cpp
 // A float4 store into shared memory needs a 16-byte boundary
@@ -1055,9 +461,9 @@ __shared__ __align__(16) float s_A[BM][BK], s_B[BK][BN];
 // Iterate over BK-wide chunks of k
 for (int k0 = 0; k0 < K; k0 += BK) {
     // Load A's chunk [BM, BK] into s_A in groups of 4 neighboring numbers.
-    // The 256 threads take the groups in order, so neighboring threads copy neighboring groups,
-    // and a thread takes another group when the tile has more groups than threads
-    for (int g = tid; g < BM * BK / 4; g += 256) {
+    // The NT = 512 threads take the groups in order, so neighboring threads copy neighboring groups,
+    // and each thread takes another group NT groups later, which is 64 rows further down
+    for (int g = tid; g < BM * BK / 4; g += NT) {
         int r = g / (BK / 4), c = (g % (BK / 4)) * 4;
         s_A[r][c : + 4] = A[block_row + r][k0 + c : + 4];
     }
@@ -1070,43 +476,7 @@ for (int k0 = 0; k0 < K; k0 += BK) {
 
 A 16-byte load needs an address that is a multiple of 16 bytes, so the kernel assumes that K and N are multiples of 4.
 
-<details markdown="1">
-<summary>SASS of the copies</summary>
-
-Kernel 6 for the B200 (`-O3 -arch=sm_100`), from `cuobjdump -sass`, compiled with the bounds checks. Each thread loads 2 `float4`s of `A` and 2 of `B` with `LDG.E.128`, and stores each with `STS.128`. A thread's two groups of each tile are `0x2000` bytes apart in shared memory, which is 64 rows of `s_A` or 16 rows of `s_B`. The bounds checks turn off a load (`@P` or `@!P`) when its group is outside the matrix, and the store then writes zeros (`RZ`) instead.
-
-```
-@P3 IMAD.WIDE.U32 R12, R15, 0x4, R12
-@P2 LDC.64 R24, c[0x0][0x388]
-@P3 LDG.E.128 R12, desc[UR8][R12.64]
-@P0 IMAD.WIDE.U32 R16, R19, 0x4, R16
-@P0 LDG.E.128 R16, desc[UR8][R16.64]
-@!P1 IMAD.WIDE R20, R23, 0x4, R20
-@!P1 LDG.E.128 R20, desc[UR8][R20.64]
-@P2 IMAD.WIDE R24, R27, 0x4, R24
-@P2 LDG.E.128 R24, desc[UR8][R24.64]
-S2UR UR6, SR_CgaCtaId
-@!P3 STS.128 [R35], RZ
-@!P0 STS.128 [R35+0x2000], RZ
-UMOV UR4, 0x400
-UIADD3 UR5, UPT, UPT, UR4, 0x4000, URZ
-ULEA UR4, UR6, UR4, 0x18
-ULEA UR5, UR6, UR5, 0x18
-LEA R58, R9, UR4, 0xa
-LEA R57, R57, UR5, 0x4
-UMOV UR4, 0x188
-@P3 STS.128 [R35], R12
-@P0 STS.128 [R35+0x2000], R16
-@!P2 STS.128 [R36+0x2000], RZ
-@!P1 STS.128 [R36], R20
-@P1 STS.128 [R36], RZ
-@P2 STS.128 [R36+0x2000], R24
-BAR.SYNC.DEFER_BLOCKING 0x0
-```
-
-</details>
-
-Kernel 6 took 3.45 ms, which is 39.79 TFLOPS and 1.60 times faster than kernel 5. With kernel 5's 64 by 64 tile and 4 by 4 squares, and BK = 16, it took 3.68 ms, so the bigger tile and the longer steps add about 6%, and most of the gain comes from the vector copies.
+Kernel 6 took 3.45 ms, which is 39.79 TFLOPS and 1.60 times faster than kernel 5.
 
 ### What changed
 
@@ -1134,7 +504,7 @@ __shared__ __align__(16) float s_A[BK][BM];
 for (int k0 = 0; k0 < K; k0 += BK) {
     // Load A's chunk with float4 loads, as in kernel 6. The 4 numbers are neighbors along k,
     // so they go into 4 different rows of s_A with 4 single stores
-    for (int g = tid; g < BM * BK / 4; g += 256) {
+    for (int g = tid; g < BM * BK / 4; g += NT) {
         int r = g / (BK / 4), c = (g % (BK / 4)) * 4;
         float4 a4 = A[block_row + r][k0 + c : + 4];
         s_A[c + 0][r] = a4.x;
@@ -1156,46 +526,7 @@ for (int k0 = 0; k0 < K; k0 += BK) {
 }
 ```
 
-<details markdown="1">
-<summary>SASS of the copies and the first loads</summary>
-
-Kernel 7 for the B200 (`-O3 -arch=sm_100`), from `cuobjdump -sass`, compiled with the bounds checks. With the 64 by 256 tile below, each thread loads one `float4` of `A` and 4 of `B` with `LDG.E.128`. The 4 numbers of `A` go into 4 rows of `s_A` with 4 `STS` stores, `0x100` bytes apart, which is one row of 64 numbers, and `B` goes into `s_B` with 4 `STS.128`. After the `BAR`, the loads from `s_A` are `LDS.128` loads, like the loads from `s_B`.
-
-```
-@P0 LDG.E.128 R12, desc[UR8][R16.64]
-...
-STS [R3], R12
-STS [R3+0x100], R13
-STS [R3+0x200], R14
-STS [R3+0x300], R15
-...
-@P1 LDG.E.128 R24, desc[UR8][R24.64]
-@P3 IMAD.WIDE R20, R19, 0x4, R20
-@!P0 LDG.E.128 R12, desc[UR8][R12.64]
-@P2 LDG.E.128 R16, desc[UR8][R16.64]
-@P3 LDG.E.128 R20, desc[UR8][R20.64]
-@!P2 STS.128 [R5+0x2000], RZ
-@!P3 STS.128 [R5+0x4000], RZ
-@!P1 STS.128 [R5+0x6000], RZ
-...
-@P1 STS.128 [R5+0x6000], R24
-@!P0 STS.128 [R5], R12
-@P2 STS.128 [R5+0x2000], R16
-@P3 STS.128 [R5+0x4000], R20
-@P0 STS.128 [R5], RZ
-BAR.SYNC.DEFER_BLOCKING 0x0
-LDS.128 R12, [R8+UR4]
-LDS.128 R20, [R3]
-LDS.128 R24, [R8+UR6]
-LDS.128 R16, [R3+0x400]
-FFMA R43, R12.reuse, R20, R43
-FFMA R44, R12.reuse, R21, R44
-...
-```
-
-</details>
-
-Kernel 7 took 3.07 ms, which is 44.80 TFLOPS and 1.13 times faster than kernel 6. Of the same 52 sizes, a 64 by 256 tile with 8 by 4 squares and BK = 32 ran fastest. With kernel 6's size, 128 by 128 and BK = 32, it took 3.32 ms.
+Kernel 7 took 3.07 ms, which is 44.80 TFLOPS and 1.13 times faster than kernel 6. It uses a 64 by 256 tile, so a row of `s_A` holds 64 numbers.
 
 ### Shared memory banks
 
@@ -1203,9 +534,11 @@ The stores into `s_A` in kernel 7 run slower than they could, because of how sha
 
 When threads of one warp use different numbers in the same bank, the bank serves them one after another, in extra passes. Such an access is called a bank conflict. Threads that read the same number don't conflict, because the bank sends that number to all of them at once.
 
-A row of `s_A` holds 64 numbers, which is two rounds of the 32 banks, so all the numbers in one column of `s_A` sit in the same bank. The 8 threads that copy one row of `A` store into one column of `s_A`, at 8 different rows. All 8 stores go to the same bank, so they take 8 passes.
+In the copy of kernel 7, each thread loads 4 neighboring numbers of one row of `A` with a `float4`, and the 4 numbers are 4 values of `k`. A row of the tile has 32 values of `k`, so 8 threads cover one row, and the 32 threads of a warp cover 4 rows. In `s_A`, row `r` of `A` becomes column `r`. A row of `s_A` holds 64 numbers, which is two rounds of the 32 banks, so all the numbers in column `r` sit in bank `r`.
 
-[![Banks of shared memory. A warp that reads 32 neighboring numbers uses each of the 32 banks once and takes 1 pass. In kernel 7, threads 0 to 7 store into column 0 of rows 0, 4, 8 and so on up to 28 of s_A. A row of s_A holds 64 numbers, so column 0 is in bank 0 in every row, and the 8 stores take 8 passes]({{ '/assets/images/kernel7-banks.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel7-banks.svg' | relative_url }})
+Each thread stores its 4 numbers with 4 single stores. In the first store of the warp, the 8 threads of each row of `A` all write into the same column of `s_A`, so the 32 stores land in only 4 banks, 8 in each. The store takes 8 passes instead of 1, and so do the other 3.
+
+[![Banks of shared memory. A warp that reads 32 neighboring numbers uses each of the 32 banks once and takes 1 pass. In kernel 7, one warp copies rows 0 to 3 of the tile of A, and each thread loads 4 neighboring values of k with a float4, so threads 0 to 7 cover row 0, threads 8 to 15 row 1, and so on. In s_A, row r of A becomes column r, and column r is in bank r in every row. The first store of the warp writes rows k = 0, 4, 8 and so on up to 28 of columns 0 to 3, all in banks 0 to 3]({{ '/assets/images/kernel7-banks.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel7-banks.svg' | relative_url }})
 
 ### Swizzling
 
@@ -1229,16 +562,14 @@ In kernel 7, each step loads its tiles from global memory, stores them into shar
 
 Kernel 8 keeps two buffers of each tile in shared memory. While the block computes on one buffer, its threads load the next tile into registers, and after the compute they store it into the other buffer:
 
-[![Kernel 8 with two buffers in shared memory. In step 0, the block computes tile 0 from buffer 0 and stores tile 1 into buffer 1. In step 1, it computes tile 1 from buffer 1 and stores tile 2 into buffer 0, and so on, with one sync at the end of each step]({{ '/assets/images/kernel8-buffers.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel8-buffers.svg' | relative_url }})
+[![Kernel 8 with two buffers in shared memory. In step 0, the block computes tile 0 from buffer 0, while its threads load tile 1 and then store it into buffer 1. In step 1, it computes tile 1 from buffer 1 and loads and stores tile 2 into buffer 0, and so on, with one sync at the end of each step]({{ '/assets/images/kernel8-buffers.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel8-buffers.svg' | relative_url }})
 
 - A thread starts the loads of the next tile before its loop over `k`. The loop doesn't use the registers that those loads fill, so the loads arrive while the thread computes, and the store after the loop doesn't wait.
 - At each step, the threads read one buffer and write the other, so one `__syncthreads()` at the end of the step is enough. After it, the next tile is complete, and every thread is done with the buffer that the step after fills.
 
 [![One warp over one step. In kernel 7, the warp loads a tile, waits for it, stores it, syncs, computes and syncs again. In kernel 8, the warp starts loading the next tile, computes while the tile is on its way, stores it into the other buffer and syncs once]({{ '/assets/images/kernel8-timeline.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel8-timeline.svg' | relative_url }})
 
-Two buffers need twice the shared memory, so I tried the 35 sizes from kernel 7 whose two buffers fit in the 48 KB that a block can declare. The next tile also has to wait in registers during the compute, so I ran each size without `__launch_bounds__` and with two settings of it. `__launch_bounds__(NT, B)` tells the compiler that B blocks of NT threads must fit on an SM, so it limits each thread to 65,536 / (B × NT) registers.
-
-A 64 by 256 tile with 8 by 8 squares and BK = 16 ran fastest, with `__launch_bounds__(256, 2)`, which allows up to 128 registers for each thread. Here are the parts of the kernel that change:
+The next tile waits in registers while the thread computes, so each thread needs more registers. `__launch_bounds__(NT, 2)` in the code tells the compiler to use few enough registers that 2 blocks fit on an SM. Here are the parts of the kernel that change:
 
 ```cpp
 __global__ void __launch_bounds__(NT, 2) sgemm_8(...) {
@@ -1255,55 +586,28 @@ __global__ void __launch_bounds__(NT, 2) sgemm_8(...) {
 
         // Start loading chunk i + 1 from global memory into registers.
         // The math below doesn't read those registers, so the loads arrive while the thread computes
-        // ... a4, b4 = this thread's float4s of chunk i + 1 ...
+        if (i + 1 < K / BK) {
+            // ... a4[..], b4[..] = this thread's float4s of chunk i + 1 ...
+        }
 
         // ... the loop over k of kernel 7, reading s_A[cur] and s_B[cur] ...
 
         // Store chunk i + 1 into the other buffer, which no thread reads at this step
-        // ... s_A[1 - cur], s_B[1 - cur] = a4, b4 ...
+        if (i + 1 < K / BK) {
+            // ... s_A[1 - cur], s_B[1 - cur] = a4[..], b4[..], with the copies of kernel 7 ...
+        }
 
-        // One wait per step instead of two
+        // One wait per step instead of two. After it, chunk i + 1 is complete,
+        // and every thread is done with buffer cur, which the next step fills
         __syncthreads();
     }
     ...
 }
 ```
 
-<details markdown="1">
-<summary>SASS of one step</summary>
+Kernel 8 took 2.91 ms, which is 47.22 TFLOPS and 1.05 times faster than kernel 7.
 
-Kernel 8 for the B200 (`-O3 -arch=sm_100`), from `cuobjdump -sass`, compiled with the bounds checks. The 5 `LDG.E.128` loads of the next tile, one of `A` and 4 of `B`, fill `R20` to `R39`. None of the `FFMA`s reads those registers, so the warp first waits for the loads at the `STS` stores after the loop. The compiler runs the loop over `k` as 4 passes of 4 values of `k`, with 256 `FFMA`s in each pass, and there is one `BAR` in each step.
-
-```
-@!P2 LDG.E.128 R32, desc[UR12][R46.64]
-@!P3 LDG.E.128 R28, desc[UR12][R44.64]
-@!P1 LDG.E.128 R20, desc[UR12][R40.64]
-@!P4 LDG.E.128 R24, desc[UR12][R42.64]
-@!P0 LDG.E.128 R36, desc[UR12][R48.64]
-...
-LDS.128 R40, [R9+-0x10]
-LDS.128 R44, [R9]
-LDS.128 R48, [R13+UR4]
-LDS.128 R52, [R13+UR4+-0x10]
-FFMA R117, R48.reuse, R40, R117
-FFMA R115, R48.reuse, R41, R62
-...
-STS [R9], R36
-STS [R9+0x100], R37
-STS [R9+0x200], R38
-STS [R9+0x300], R39
-STS.128 [R12], R32
-STS.128 [R12+0x1000], R28
-STS.128 [R12+0x2000], R24
-STS.128 [R12+0x3000], R20
-BAR.SYNC.DEFER_BLOCKING 0x0
-```
-
-</details>
-
-Kernel 8 took 2.91 ms, which is 47.22 TFLOPS and 1.05 times faster than kernel 7. Without the launch bound, the same size needs 129 registers, so only 1 block fits on an SM, and it took 3.34 ms. The fastest size with kernel 7's 8 by 4 squares took 2.96 ms.
-
-In kernel 7, 8 by 8 squares were slower than 8 by 4, at 3.23 ms at best. Bigger squares need more registers, so fewer warps fit on an SM, and an SM with fewer warps covers less of the waits for global memory. Double buffering removes most of those waits, so in kernel 8 the bigger squares win.
+Kernel 8 uses squares of 8 by 8 results for each thread, while kernel 7 ran faster with 8 by 4. Bigger squares need more registers, so fewer warps fit on an SM, and an SM with fewer warps covers less of the waits for global memory. Double buffering removes most of those waits, so in kernel 8 the bigger squares win.
 
 ### What changed
 
@@ -1324,21 +628,21 @@ Warp tiling keeps the 8 by 8 elements for each thread but spreads them out, so t
 - The 8 warps of a block split the 128 by 128 tile of `C` into pieces of 32 by 64, one for each warp.
 - Each warp's piece splits into 4 sub-pieces of 16 by 32. In each sub-piece, the 32 threads sit as 4 rows of 8, and each one computes a 4 by 4 square.
 - Each thread computes one square in each of the 4 sub-pieces, which is 8 by 8 elements, and its columns come as two groups of 4 that are 32 columns apart.
-- At each `k`, threads 0 to 7 read 8 neighboring groups of 4 numbers of `s_B`, which is one row of 128 bytes, so no two of them hit the same bank.
+- At each `k`, threads 0 to 7 read 8 neighboring groups of 4 numbers of `s_B`, which is one row of 128 bytes, so no two of them hit the same bank. Threads 8 to 31 sit in the same columns of their sub-piece as threads 0 to 7, so they read the same numbers of `s_B`, and the banks send those numbers to all of them at once.
 
-[![Warp tiling from the block down to one thread. The block's tile of C is split among 8 warps. The piece of warp 0 is split into 4 sub-pieces, and in each one the 32 threads sit as 4 rows of 8 squares, with thread 0 and thread 1 marked in every sub-piece and the numbers of s_A and s_B they read at one k. Thread 0 keeps its 4 squares in registers as 8 by 8 results and updates them from 8 numbers of s_A and 8 of s_B at each k]({{ '/assets/images/kernel9-levels.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel9-levels.svg' | relative_url }})
+[![Warp tiling from the block down to one thread. The block's tile of C is split among 8 warps. The piece of warp 0 is split into 4 sub-pieces, and in each one the 32 threads sit as 4 rows of 8 squares of 4 by 4, each cell labeled with its thread. Above the piece, each cell of s_B is 4 numbers and is labeled with the thread that loads it, 0 to 7 and then 0 to 7 again. Thread 0 has a square in each sub-piece, so it loads 2 groups of s_B and 2 of s_A at each k. It keeps its 4 squares in registers as 8 by 8 results and updates them from 8 numbers of s_A and 8 of s_B]({{ '/assets/images/kernel9-levels.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel9-levels.svg' | relative_url }})
 
 The next picture shows which numbers of `s_B` threads 0 to 7 load at one `k`, in kernel 8 and in kernel 9:
 
-[![Which numbers of s_B threads 0 to 7 load at one k. In kernel 8, a thread's 8 columns sit next to each other, so thread t loads groups 2t and 2t + 1 of 4 numbers, and in the first load threads 0 and 4 both use banks 0 to 3, so the load takes twice the passes. In kernel 9, thread t loads groups t and t + 8, so each load uses every bank once]({{ '/assets/images/kernel9-banks.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel9-banks.svg' | relative_url }})
+[![Which banks threads 0 to 7 use in their first load of s_B. Each box is 4 neighboring numbers, and 8 boxes fill the 32 banks. In kernel 8, thread t loads boxes 2t and 2t + 1, so in the first load threads 0 and 4 both use banks 0 to 3, and so do 1 and 5, 2 and 6, and 3 and 7, and the load takes 2 passes. In kernel 9, thread t loads boxes t and t + 8, so in each load every thread has banks of its own, and the load takes 1 pass]({{ '/assets/images/kernel9-banks.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel9-banks.svg' | relative_url }})
 
 Kernel 9 changes where each thread's elements sit, and its tile of `C` is 128 by 128 instead of 64 by 256. Everything else is the same as in kernel 8:
 
 - Each thread still computes 8 by 8 elements and does 64 `FFMA`s for 4 vector loads from shared memory at each `k`.
-- A block still has 256 threads, BK is still 16, and `__launch_bounds__(256, 2)` still lets each thread use up to 128 registers.
+- A block still has 256 threads, and the launch bound still lets 2 blocks fit on an SM.
 - The `float4` copies, the transposed `s_A` and the two buffers are the same.
 
-I tried 268 layouts of tiles, warp pieces and squares, with BK of 8, 16 or 32, each with and without the launch bound. The layout above with BK = 16 and the bound tied for fastest with a 64 by 256 tile. Here are the parts of the kernel that change:
+Here are the parts of the kernel that change:
 
 ```cpp
 // Split the 128 x 128 tile among the 8 warps: 4 rows of 2 pieces of 32 x 64
@@ -1370,30 +674,7 @@ int t_col = (lane % 8) * 4;
 // ... write registers results[..][..] to C ...
 ```
 
-<details markdown="1">
-<summary>SASS of the loop over k</summary>
-
-Kernel 9 for the B200 (`-O3 -arch=sm_100`), from `cuobjdump -sass`, compiled with the bounds checks. The compiler runs the loop over `k` as 4 passes of 4 values of `k`. The first 4 `LDS.128` loads are the 8 numbers of `s_B` (`R56`, `R52`, 128 bytes apart) and the 8 numbers of `s_A` (`R60`, `R40`, 64 bytes apart) for one `k`. The fifth load already reads `s_B` for the next `k`, one row of 512 bytes further on.
-
-```
-LDS.128 R56, [R11+-0x80]
-UIADD3 UR4, UPT, UPT, UR4, 0x4, URZ
-LDS.128 R52, [R11]
-UISETP.NE.U32.AND UP0, UPT, UR4, 0x10, UPT
-LDS.128 R60, [R20]
-LDS.128 R40, [R20+-0x40]
-LDS.128 R44, [R11+0x200]
-FFMA R103, R60.reuse, R56, R103
-FFMA R112, R60.reuse, R57, R112
-FFMA R105, R60.reuse, R58, R105
-FFMA R114, R60.reuse, R59, R114
-FFMA R107, R60.reuse, R52, R107
-...
-```
-
-</details>
-
-Kernel 9 took 2.67 ms, which is 51.57 TFLOPS and 1.09 times faster than kernel 8. The 64 by 256 tile took the same time, and without the bound, the fastest layout took 2.70 ms.
+Kernel 9 took 2.67 ms, which is 51.57 TFLOPS and 1.09 times faster than kernel 8.
 
 ### What changed
 
@@ -1402,24 +683,141 @@ Kernel 9 took 2.67 ms, which is 51.57 TFLOPS and 1.09 times faster than kernel 8
 - Each thread needs 127 registers. Two blocks of 256 threads fit on an SM, so an SM has 16 warps, as in kernel 8.
 - The pipe that runs the `FFMA`s is busy 71% of the time, up from 65%, and the most common reason why a warp waits is still that the SM picks another warp first.
 
+## Kernel 10: two multiply-adds in one instruction
+
+Kernel 9 reaches 69% of the FP32 speed, and cuBLAS reaches 85%. The limit is the scheduler. Each quarter of an SM has [one scheduler]({{ '/notes/gpu.html#sms' | relative_url }}), which starts one instruction for one warp on each tick, and 32 FP32 cores, so one `FFMA` for a warp fills the FP32 cores of the quarter for one tick. To keep the FP32 cores busy on every tick, the scheduler would have to start an `FFMA` on every tick. Each other instruction, e.g., a load from shared memory, an addition for an address or the branch at the end of the loop, takes a tick away from the FP32 cores.
+
+The B200 has an instruction called `FFMA2`, which does two multiply-adds in each thread. It treats two 32-bit numbers in two neighboring registers as a pair, multiplies a pair by a second pair and adds the two products to a third pair. One `FFMA2` for a warp does 64 multiply-adds, so it keeps the FP32 cores busy for 2 ticks, and the scheduler is free on every other tick for the other instructions. Nsight Compute shows that cuBLAS does all of its multiply-adds with `FFMA2`.
+
+In kernel 10, each thread keeps its 8 rows of results as 4 pairs of neighboring rows. At each `k`, the thread loads its numbers of `s_A` as 4 pairs, and one `FFMA2` multiplies a pair by one number of `s_B` and adds the two products to the two results in that column.
+
+[![FFMA and FFMA2 for one thread at one k. In kernel 9, one FFMA multiplies one number of s_A by one number of s_B and adds the product to one result, so a thread runs 64 FFMAs at each k. In kernel 10, one FFMA2 multiplies a pair of numbers of s_A from 2 neighboring rows by one number of s_B and adds the products to 2 results, so a thread runs 32 FFMA2s at each k. Below, one scheduler tick by tick: in kernel 9, each LDS, add or branch takes a tick away from the FP32 cores, and in kernel 10, each FFMA2 keeps the FP32 cores busy for 2 ticks, so the other instructions fit in between]({{ '/assets/images/kernel10-ffma2.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel10-ffma2.svg' | relative_url }})
+
+CUDA has `FFMA2` as the function `__ffma2_rn`, which takes three `float2`s, a CUDA type that holds 2 floats. Each half rounds the same way as an `FFMA`, so the results are the same as in kernel 9. Kernel 10 uses the sizes of kernel 9. Here are the parts of the kernel that change:
+
+```cpp
+// The thread's 8 rows of results as 4 pairs of neighboring rows:
+// results[p][n] holds rows 2p and 2p + 1 of column n
+float2 results[WMITER * TM / 2][WNITER * TN];
+float2 reg_A[WMITER * TM / 2];  // row k of s_A, this thread's rows, in pairs
+float  reg_B[WNITER * TN];      // row k of s_B, this thread's columns
+
+// ... Iterate over BK-wide chunks of k with the two buffers of kernel 8 ...
+    for (int k = 0; k < BK; k++) {
+        // ... load reg_A in pairs and reg_B from s_A[cur] and s_B[cur], as in kernel 9 ...
+
+        // One FFMA2 multiplies a pair of rows of s_A by one number of s_B
+        // and adds the products to 2 results: 4 x 8 = 32 FFMA2s for 64 multiply-adds
+        for (int p = 0; p < WMITER * TM / 2; p++)
+            for (int n = 0; n < WNITER * TN; n++)
+                results[p][n] = __ffma2_rn(reg_A[p], make_float2(reg_B[n], reg_B[n]), results[p][n]);
+    }
+// ... write the pairs of results to C ...
+```
+
+Kernel 10 took 2.48 ms, which is 55.34 TFLOPS and 1.08 times faster than kernel 9.
+
+### What changed
+
+- The kernel runs 38% fewer instructions, and the schedulers start an instruction on about half of the ticks instead of 80%.
+- The kernel reaches 74% of the FP32 speed, up from 69%, while cuBLAS reaches 85%.
+- Each thread needs 119 registers, and an SM still runs 2 blocks of 256 threads.
+- cuBLAS is still 15% faster. Its loop over `k` is written out in full, while in kernel 10 each `k` still costs 5 instructions for the loop counter, the addresses and the branch, and some of those run on the same pipe as the `FFMA2`s.
+
+## Kernel 11: loading the next numbers ahead
+
+In kernel 10, a thread loads its numbers of `s_A` and `s_B` for one `k` and uses them right after. A load from shared memory takes some ticks to arrive, so every warp waits at every `k`, and the SM can only cover the wait by running other warps. cuBLAS hardly waits there, because it loads the numbers for the next `k` while the `FFMA2`s for this `k` run.
+
+Kernel 11 does the same. Each thread keeps two sets of registers for its numbers of `s_A` and `s_B`. While the `FFMA2`s for `k` use one set, the loads for `k + 1` fill the other set, so the numbers are ready when the thread gets to `k + 1`. A register has a fixed name in each instruction, so the code can only pick the set `k % 2` if the compiler knows `k`. The loop over `k` is therefore written out in full with `#pragma unroll`.
+
+The second set and the longer loop need more registers. With them, the compiler moved the loads of the next tile from global memory, which kernel 8 starts before the loop over `k`, to after the loop, probably to save the registers that would hold them during the loop. Each step then waited for global memory again. Kernel 11 therefore copies the tiles with asynchronous copies, which CUDA has as `__pipeline_memcpy_async`. An asynchronous copy goes from global memory straight into shared memory without passing through registers, and the thread goes on while the copy is on the way. The kernel keeps 4 buffers of each tile, so the copies of the next 3 tiles can be on the way while the block computes on one.{% include components/sidenote.html id="sn-async" label="3" text="Neither change helps on its own here. Asynchronous copies alone made kernel 10 slower, because kernel 10 hardly waits for global memory, and the copies into the transposed s_A take one instruction for each number. Loading ahead alone also made it slower, because the compiler moved the loads of the next tile behind the loop. Together, the two take kernel 10 from 2.48 to 2.39 ms." %}
+
+[![One warp over one step. In kernel 10, each k loads its numbers from s_A and s_B, waits for them and then runs its 32 FFMA2s, so the FFMA2s stop at every k. In kernel 11, the numbers for k + 1 load while the FFMA2s for k run, so the FFMA2s run without a break. Before the last k, the warp waits for the next tile and syncs, and the numbers of the next tile for k = 0 load while the last FFMA2s run. The asynchronous copies of the next tiles are on the way during the whole step]({{ '/assets/images/kernel11-load-ahead.svg' | relative_url }}){: .ia-gpu-overview}]({{ '/assets/images/kernel11-load-ahead.svg' | relative_url }})
+
+Kernel 11 uses a tile of 64 by 128 with 128 threads in a block, as cuBLAS does. Here are the parts of the kernel that change:
+
+```cpp
+// Two sets of registers for the numbers of s_A and s_B.
+// load_k(reg_A, reg_B, s_A, s_B, k) reads this thread's numbers of s_A and s_B for one k,
+// in pairs for s_A, as in kernel 10
+float2 reg_A[2][WMITER * TM / 2];
+float  reg_B[2][WNITER * TN];
+
+// ... start the asynchronous copies of tiles 0 to STAGES - 2, wait for tile 0,
+//     and load its numbers for k = 0 into set 0 ...
+
+for (int i = 0; i < num_tiles; i++) {
+    int cur = i % STAGES;
+
+    // Start copying tile i + STAGES - 1 straight into a free buffer of shared memory,
+    // and close the group of copies
+    // ... __pipeline_memcpy_async(...) for this thread's numbers of the tile ...
+    __pipeline_commit();
+
+    #pragma unroll  // so that k % 2 is known when the program is compiled
+    for (int k = 0; k < BK; k++) {
+        if (k < BK - 1) {
+            // Load the numbers for k + 1 into the other set, while the FFMA2s for k run
+            load_k(reg_A[(k + 1) % 2], reg_B[(k + 1) % 2], s_A[cur], s_B[cur], k + 1);
+        } else {
+            // Before the last k: wait for this thread's copies of tile i + 1, then for every thread,
+            // and load the numbers of tile i + 1 for k = 0
+            __pipeline_wait_prior(STAGES - 2);
+            __syncthreads();
+            if (i + 1 < num_tiles)
+                load_k(reg_A[0], reg_B[0], s_A[(i + 1) % STAGES], s_B[(i + 1) % STAGES], 0);
+        }
+        // ... the 32 FFMA2s of kernel 10, with set k % 2 ...
+    }
+}
+```
+
+Kernel 11 took 2.39 ms, which is 57.39 TFLOPS and 1.04 times faster than kernel 10.
+
+### What changed
+
+- The warps wait for their loads from shared memory a third as often as in kernel 10.
+- The copies from global memory hold no registers, and the waits for them stay small.
+- Each thread needs 148 registers, and 3 blocks of 128 threads fit on an SM, which is 12 warps instead of 16.
+- cuBLAS is still 10% faster. It reaches 85% of the FP32 speed, against 77% for kernel 11, and its warps wait less at `__syncthreads()`.
+
+## Where kernel 11 ends up
+
+Nsight Compute sums up a kernel by how busy each part of the GPU is, as a share of the most that the part can do. It calls this share the speed of light.
+
+[![Nsight Compute's GPU Speed Of Light section for kernel 11. Compute (SM) throughput is 77.64%, memory throughput 75.63%, of which the L1/TEX cache and shared memory are 77.09%, the L2 cache 12.60% and DRAM 3.98%. Both bars of the throughput chart stop near 77%]({{ '/assets/images/ncu-kernel11-sol.svg' | relative_url }})]({{ '/assets/images/ncu-kernel11-sol.svg' | relative_url }})
+
+Kernel 11 is limited by the SM itself, not by HBM. The SM is busy about 78% of the time, mostly with `FFMA2`s, and shared memory, which Nsight Compute counts under memory, is busy about 77% of the time. The L2 cache and HBM are almost idle, because each number that comes into shared memory is used many times.
+
+[![Nsight Compute's Warp State Statistics for kernel 11, in cycles per instruction that a warp starts. The largest bars are math pipe throttle at about 1.1, not selected at about 1.1, selected at 1.0 and wait at about 0.9. Short scoreboard, barrier, dispatch stall and long scoreboard are all below 0.35]({{ '/assets/images/ncu-kernel11-warp-state.svg' | relative_url }})]({{ '/assets/images/ncu-kernel11-warp-state.svg' | relative_url }})
+
+The second picture shows where a warp spends its ticks, counted for each instruction that it starts. The two largest reasons are that the FP32 cores of its quarter are still busy with earlier `FFMA2`s, and that another warp of the quarter started an instruction on that tick. In both cases the quarter is already working. The waits for global memory, for shared memory and at `__syncthreads()`, which kernels 6, 8 and 11 went after one by one, are now small.
+
+The rest of the gap is inside the SM:
+
+- Kernel 11 reaches 77% of the FP32 speed and cuBLAS 85%. The other ticks go to instructions other than `FFMA2`, and to the fixed waits between instructions that depend on each other.
+- Shared memory is busy about as often as the FP32 cores, so a faster kernel would also need fewer loads from shared memory for each `FFMA2`.
+
 ## Results
 
 All times are for M = N = K = 4096 with 32-bit numbers on the B200.
 
-| Kernel | Time (ms) | TFLOPS | % of FP32 speed | % of cuBLAS |
-|---|---|---|---|---|
-| cuBLAS | 2.16 | 63.60 | 85.4% | 100% |
-| 1, 8 × 8 blocks | 66.66 | 2.06 | 2.8% | 3.2% |
-| 1, 16 × 16 blocks | 126.61 | 1.09 | 1.5% | 1.7% |
-| 1, 32 × 32 blocks | 246.97 | 0.56 | 0.7% | 0.9% |
-| 2, 32 × 32 blocks | 19.50 | 7.05 | 9.5% | 11.1% |
-| 3, 32 × 32 tiles | 13.32 | 10.32 | 13.9% | 16.2% |
-| 4, 16 results per thread | 6.35 | 21.65 | 29.1% | 34.0% |
-| 5, 4 × 4 results per thread | 5.53 | 24.86 | 33.4% | 39.1% |
-| 6, float4 copies | 3.45 | 39.79 | 53.4% | 62.6% |
-| 7, transposed s_A | 3.07 | 44.80 | 60.2% | 70.4% |
-| 8, double buffering | 2.91 | 47.22 | 63.4% | 74.2% |
-| 9, warp tiling | 2.67 | 51.57 | 69.3% | 81.1% |
+| Kernel | Time (ms) | TFLOPS | % of cuBLAS |
+|---|---|---|---|
+| cuBLAS | 2.16 | 63.60 | 100% |
+| 1, 8 × 8 blocks | 66.66 | 2.06 | 3.2% |
+| 1, 16 × 16 blocks | 126.61 | 1.09 | 1.7% |
+| 1, 32 × 32 blocks | 246.97 | 0.56 | 0.9% |
+| 2, 32 × 32 blocks | 19.50 | 7.05 | 11.1% |
+| 3, 32 × 32 tiles | 13.32 | 10.32 | 16.2% |
+| 4, 16 results per thread | 6.35 | 21.65 | 34.0% |
+| 5, 4 × 4 results per thread | 5.53 | 24.86 | 39.1% |
+| 6, float4 copies | 3.45 | 39.79 | 62.6% |
+| 7, transposed s_A | 3.07 | 44.80 | 70.4% |
+| 8, double buffering | 2.91 | 47.22 | 74.2% |
+| 9, warp tiling | 2.67 | 51.57 | 81.1% |
+| 10, FFMA2 | 2.48 | 55.34 | 87.0% |
+| 11, loading ahead | 2.39 | 57.39 | 90.2% |
 
 ## References
 
