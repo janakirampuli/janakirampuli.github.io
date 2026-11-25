@@ -2,7 +2,7 @@
 layout: notes
 title: "CUDA kernels and matrix multiplication"
 description: "Writing GPU programs in CUDA: threads, blocks and grids in code, what the compiler makes of a kernel, and eleven matrix multiplication kernels on a B200, from a naive kernel to about 90% of cuBLAS."
-date: 2026-11-22
+date: 2026-11-25
 tags: ["gpu", "cuda", "matmul"]
 project: gpu-programming
 part: 2
