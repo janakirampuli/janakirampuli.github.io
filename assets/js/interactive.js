@@ -505,7 +505,7 @@ if (document.querySelector('[data-tf-explorer]')) {
   });
 }
 
-if (document.querySelector('[data-gpu-machine], [data-gpu-intensity], [data-gpu-threads]')) {
+if (document.querySelector('[data-gpu-machine], [data-gpu-intensity], [data-gpu-threads], [data-gpu-launch]')) {
   import('./gpu-viz.js').catch((e) => {
     console.error('GPU diagrams failed', e);
   });

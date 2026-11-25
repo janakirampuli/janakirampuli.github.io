@@ -156,6 +156,62 @@
 .ia-gpu-ticks .ia-gpu-swatch.is-wait { opacity: 0.7; }
 
 
+/* Kernel launch */
+.ia-gpu-box { fill: none; stroke: var(--tf-line); stroke-width: 1; transition: stroke 150ms ease; }
+.ia-gpu-box.is-on { stroke: var(--ia-accent); stroke-width: 2; }
+
+.ia-gpu-title {
+  font-family: var(--ia-font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--tf-ink);
+}
+
+.ia-gpu-code {
+  font-family: var(--ia-font-mono);
+  font-size: 9.5px;
+  fill: var(--ia-muted);
+  white-space: pre;
+}
+
+.ia-gpu-code.is-on { fill: var(--tf-ink); }
+.ia-gpu-hot { fill: var(--ia-bg-soft); stroke: var(--ia-accent); stroke-width: 1; }
+
+.ia-gpu-card { stroke-width: 1; }
+.ia-gpu-card.is-on { fill: var(--ia-bg-soft); stroke: var(--ia-accent); }
+.ia-gpu-card.is-off { fill: none; stroke: var(--tf-line); stroke-dasharray: 3 3; }
+
+.ia-gpu-arrow { stroke: var(--ia-muted); stroke-width: 1; }
+.ia-gpu-arrowhead { fill: var(--ia-muted); }
+
+.ia-gpu-slot { fill: none; stroke: var(--tf-line); stroke-dasharray: 3 3; }
+.ia-gpu-quarter { fill: none; stroke: var(--tf-line); }
+
+.ia-gpu-blk { stroke-width: 1; }
+.ia-gpu-blk.is-wait { fill: var(--tf-cell); stroke: var(--tf-grid); }
+.ia-gpu-blk.is-run { fill: var(--tf-t0); stroke: var(--tf-t0); }
+.ia-gpu-blk.is-away { fill: none; stroke: var(--tf-line); stroke-dasharray: 3 3; }
+.ia-gpu-blk.is-done { fill: var(--tf-grid); stroke: var(--tf-grid); opacity: 0.3; }
+
+.ia-gpu-blk__num {
+  font-family: var(--ia-font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--tf-ink);
+}
+
+.ia-gpu-blk__num.is-run { fill: #fff; }
+.ia-gpu-blk__num.is-away { fill: var(--ia-muted); font-weight: 400; }
+.ia-gpu-blk__num.is-done { fill: var(--ia-muted); }
+
+.ia-gpu-swatch.ia-gpu-blk.is-wait { background: var(--tf-cell); box-shadow: inset 0 0 0 1px var(--tf-grid); }
+.ia-gpu-swatch.ia-gpu-blk.is-run { background: var(--tf-t0); }
+.ia-gpu-swatch.ia-gpu-blk.is-done { background: var(--tf-grid); opacity: 0.3; }
+
+.ia-gpu-cell.is-done, .ia-gpu-swatch.is-done { fill: var(--tf-grid); background: var(--tf-grid); opacity: 0.12; }
+.ia-gpu-me { fill: none; stroke: var(--tf-ink); stroke-width: 1.5; }
+.ia-gpu-step { margin: 0 0 0 auto; }
+
 /* Overview drawing */
 .ia-gpu-overview { display: block; width: 100%; height: auto; border-radius: 4px; }
 html.dark-mode .ia-gpu-overview { filter: invert(0.9) hue-rotate(180deg); }

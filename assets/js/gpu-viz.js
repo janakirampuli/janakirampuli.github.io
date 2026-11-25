@@ -3,6 +3,7 @@
   - [data-gpu-machine]:   a processor that runs one place of y = a·x + y, one step at a time
   - [data-gpu-intensity]: math operations per number read, for a program and for the GPU
   - [data-gpu-threads]:   one scheduler switching between threads that wait on memory
+  - [data-gpu-launch]:    a kernel launch, from the CPU to the work distributor, an SM and one thread
   Loaded on demand by interactive.js. The styles are in transformer.css and gpu.css.
 */
 
@@ -457,12 +458,191 @@ function buildThreads(root) {
 }
 
 /* -----------------------------
+ * Kernel launch
+ * ----------------------------- */
+
+const LAUNCH_BLOCKS = 10;
+// [SM, slot] of each block. Blocks 8 and 9 run in the second wave.
+const LAUNCH_HOME = [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1], [3, 0], [3, 1], [0, 0], [1, 0]];
+const LAUNCH_PROGRAM = ['load  r1, a', 'load  r2, x[165]', 'load  r3, y[165]', 'mul   r4, r1, r2', 'add   r3, r4, r3', 'store y[165], r3'];
+
+const blocksWith = (fn) => Array.from({ length: LAUNCH_BLOCKS }, (_, b) => fn(b));
+
+// Warp states for SM 0, as [block 0, block 1] for each quarter.
+const W_READY = [['ready', 'ready'], ['ready', 'ready'], ['ready', 'ready'], ['ready', 'ready']];
+
+const LAUNCH_STEPS = [
+  { view: 'chip', focus: [], cmd: 'none', copy: 'none', blocks: null,
+    caption: 'The kernel runs y = a·x + y on lists of 1,280 places, as a grid of 10 blocks of 128 threads, so every place gets one thread. The chip is made up, with 4 SMs that each hold 256 threads, so each SM has room for 2 of these blocks.' },
+  { view: 'chip', focus: ['cpu'], cmd: 'cpu', copy: 'none', blocks: null,
+    caption: 'The CPU writes a launch command. The command names the kernel and gives the size of the grid, the size of each block and the input values, which are a, the length of the lists and the addresses of x and y.' },
+  { view: 'chip', focus: ['stream'], cmd: 'stream', copy: 'stream', blocks: null,
+    caption: 'The CPU puts the command in a stream, which is a queue that the GPU reads from, and it puts a second command after it that copies y back to the CPU. The CPU then goes on with its own work.' },
+  { view: 'chip', focus: ['wd'], cmd: 'none', copy: 'stream', blocks: blocksWith(() => 'wait'),
+    caption: 'The GPU takes the launch command from the stream and gives the grid to the work distributor. All 10 blocks wait there for space on an SM.' },
+  { view: 'chip', focus: ['sms'], cmd: 'none', copy: 'stream', blocks: blocksWith((b) => (b < 8 ? 'run' : 'wait')),
+    caption: 'The work distributor sends a block to every SM that has room for it. The 4 SMs take 8 blocks, and blocks 8 and 9 keep waiting.' },
+  { view: 'sm', warps: W_READY, panel: 'setup',
+    caption: 'Inside SM 0, the SM reserves registers for the 256 threads of blocks 0 and 1. It splits each block into 4 warps of 32 threads with consecutive numbers, and each warp goes to one quarter of the SM. The diagram shows one possible placement of the warps.' },
+  { view: 'sm', warps: W_READY, panel: 'thread', rows: [], regs: ['', '', '', ''],
+    caption: 'Each thread reads its block number and its thread number. Thread 37 of block 1 is in warp 1, which holds threads 32 to 63, and it works on place 1 · 128 + 37, which is place 165.' },
+  { view: 'sm', warps: [['math', 'wait'], ['math', 'wait'], ['wait', 'math'], ['ready', 'read']], panel: 'thread', rows: [0, 1, 2], regs: ['a', 'on the way', 'on the way', ''],
+    caption: 'The warp of thread 37 loads a and starts the reads of x and y at place 165, and then it waits for the data. In the meantime, the scheduler of its quarter runs the other warp, which is from block 0.' },
+  { view: 'sm', warps: [['wait', 'math'], ['wait', 'math'], ['math', 'wait'], ['wait', 'math']], panel: 'thread', rows: [3, 4], regs: ['a', 'x[165]', 'a·x[165] + y[165]', 'a·x[165]'],
+    caption: 'The data arrives, and the warp runs mul and add. Each of the 32 threads uses its own registers, so thread 37 computes a·x + y for place 165 while the other threads do the same for their places.' },
+  { view: 'sm', warps: [['math', 'wait'], ['math', 'done'], ['read', 'wait'], ['math', 'wait']], panel: 'thread', rows: [5], regs: ['a', 'x[165]', 'a·x[165] + y[165]', 'a·x[165]'], done: true,
+    caption: 'The warp runs store, and each thread writes its new y to memory. Every thread of the warp has reached the end of the program, so the warp is done.' },
+  { view: 'chip', focus: ['sms'], cmd: 'none', copy: 'stream', blocks: blocksWith((b) => (b < 8 ? 'done' : 'run')),
+    caption: 'When all the warps of a block are done, the SM frees the registers of the block. Blocks 0 to 7 have finished, and the work distributor sends blocks 8 and 9 into the free space as a second wave, while SMs 2 and 3 have nothing left to run.' },
+  { view: 'chip', focus: ['stream', 'cpu'], cmd: 'none', copy: 'run', blocks: blocksWith(() => 'done'),
+    caption: 'The last block finishes, so the kernel is finished. The next command in the stream, which copies y back to the CPU, can now run, and the CPU finds out that the kernel has finished when the copy arrives.' },
+];
+
+function buildLaunch(root) {
+  let at = 0;
+  const picture = el('div', { class: 'ia-gpu-chart ia-gpu-launch' });
+  const legend = el('div', { class: 'ia-gpu-legend' });
+  const back = el('button', { type: 'button', class: 'ia-tf-btn', onclick: () => go(at - 1) }, 'Back');
+  const next = el('button', { type: 'button', class: 'ia-tf-btn is-primary', onclick: () => go(at + 1) }, 'Next step');
+  const reset = el('button', { type: 'button', class: 'ia-tf-btn', onclick: () => go(0) }, 'Start over');
+  const stepOut = el('span', { class: 'ia-anim__label ia-gpu-step' });
+  const cap = caption();
+
+  root.append(picture, legend, el('div', { class: 'ia-tf-toolbar' }, [back, next, reset, stepOut]), cap);
+
+  const box = (x, y, w, h, on, extra = '') => svg('rect', { class: `ia-gpu-box${on ? ' is-on' : ''}${extra}`, x, y, width: w, height: h, rx: 4 });
+  const title = (x, y, text) => svg('text', { class: 'ia-gpu-title', x, y }, text);
+  const small = (x, y, text, cls = '') => svg('text', { class: `ia-gpu-axis${cls}`, x, y }, text);
+  const arrow = (x1, y1, x2, y2) => svg('line', { class: 'ia-gpu-arrow', x1, y1, x2, y2, 'marker-end': 'url(#ia-gpu-head)' });
+  const defs = () => svg('defs', {}, svg('marker', { id: 'ia-gpu-head', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto' }, svg('path', { class: 'ia-gpu-arrowhead', d: 'M0,0 L8,4 L0,8 z' })));
+
+  function card(x, y, w, lines, state) {
+    return [
+      svg('rect', { class: `ia-gpu-card is-${state}`, x, y, width: w, height: 34, rx: 3 }),
+      ...lines.map((t, i) => small(x + 7, y + 14 + i * 12, t, i === 0 ? ' is-strong' : '')),
+    ];
+  }
+
+  function block(x, y, size, b, state) {
+    return [
+      svg('rect', { class: `ia-gpu-blk is-${state}`, x, y, width: size, height: size, rx: 3 }),
+      svg('text', { class: `ia-gpu-blk__num is-${state}`, x: x + size / 2, y: y + size / 2 + 3.5, 'text-anchor': 'middle' }, String(b)),
+    ];
+  }
+
+  function chip(s) {
+    const on = (k) => s.focus.includes(k);
+    const parts = [defs()];
+
+    parts.push(box(10, 20, 140, 95, on('cpu')), title(20, 38, 'CPU'));
+    if (s.cmd === 'cpu') parts.push(...card(20, 56, 120, ['Launch command', '10 blocks of 128 threads'], 'on'));
+    if (s.copy === 'run') parts.push(...card(20, 56, 120, ['y arrives', 'the kernel has finished'], 'on'));
+
+    parts.push(box(10, 145, 140, 105, on('stream')), title(20, 163, 'Stream'));
+    const slots = [];
+    if (s.cmd === 'stream') slots.push([['Launch command', '10 blocks of 128 threads'], 'on']);
+    if (s.copy !== 'none') slots.push([['Copy y to the CPU', s.copy === 'run' ? 'runs now' : 'waits for the kernel'], s.copy === 'run' ? 'on' : 'off']);
+    slots.forEach(([lines, state], i) => parts.push(...card(20, 172 + i * 38, 120, lines, state)));
+
+    parts.push(arrow(80, 115, 80, 143), arrow(150, 197, 183, 197), arrow(345, 135, 373, 135));
+
+    parts.push(box(185, 20, 160, 230, on('wd')), title(195, 38, 'Work distributor'));
+    if (s.blocks) {
+      parts.push(small(195, 54, 'Grid'));
+      s.blocks.forEach((st, b) => {
+        const x = 231 + (b % 2) * 38;
+        const y = 62 + Math.floor(b / 2) * 37;
+        parts.push(...block(x, y, 30, b, st === 'run' ? 'away' : st));
+      });
+    }
+
+    for (let sm = 0; sm < 4; sm++) {
+      const x = 375 + (sm % 2) * 135;
+      const y = 20 + Math.floor(sm / 2) * 125;
+      parts.push(box(x, y, 120, 105, on('sms')), title(x + 10, y + 18, `SM ${sm}`));
+      for (let slot = 0; slot < 2; slot++) {
+        const bx = x + 15 + slot * 50;
+        const by = y + 40;
+        const b = s.blocks ? s.blocks.findIndex((st, i) => st === 'run' && LAUNCH_HOME[i][0] === sm && LAUNCH_HOME[i][1] === slot) : -1;
+        if (b >= 0) parts.push(...block(bx, by, 40, b, 'run'));
+        else parts.push(svg('rect', { class: 'ia-gpu-slot', x: bx, y: by, width: 40, height: 40, rx: 3 }));
+      }
+      parts.push(small(x + 15, y + 96, 'room for 2 blocks'));
+    }
+    return parts;
+  }
+
+  function sm(s) {
+    const parts = [box(10, 10, 420, 250, false), title(20, 27, 'SM 0, running blocks 0 and 1')];
+    for (let q = 0; q < 4; q++) {
+      const y = 36 + q * 56;
+      parts.push(svg('rect', { class: 'ia-gpu-quarter', x: 20, y, width: 400, height: 50, rx: 3 }), small(28, y + 12, `Quarter ${q}, one scheduler`, ' is-strong'));
+      for (let b = 0; b < 2; b++) {
+        const by = y + 18 + b * 15;
+        const state = s.warps[q][b];
+        parts.push(small(28, by + 9, `block ${b}, warp ${q}`));
+        for (let lane = 0; lane < 32; lane++) {
+          parts.push(svg('rect', { class: `ia-gpu-cell is-${state}`, x: 118 + lane * 9, y: by, width: 8, height: 11, rx: 1 }));
+        }
+      }
+    }
+    if (s.panel === 'thread') {
+      parts.push(svg('rect', { class: 'ia-gpu-me', x: 118 + 5 * 9 - 1.5, y: 36 + 56 + 18 + 15 - 1.5, width: 11, height: 14, rx: 2 }));
+    }
+
+    parts.push(box(445, 10, 185, 250, s.panel === 'thread'));
+    if (s.panel === 'setup') {
+      parts.push(title(455, 27, 'Blocks 0 and 1'));
+      ['128 threads in each block', '4 warps in each block', 'Registers reserved for', 'all 256 threads'].forEach((t, i) => parts.push(small(455, 48 + i * 15, t)));
+      return parts;
+    }
+
+    parts.push(title(455, 27, s.done ? 'Thread 37 of block 1, done' : 'Thread 37 of block 1'));
+    [['Block number', '1'], ['Thread number', '37'], ['Place', '1 · 128 + 37 = 165']].forEach(([k, v], i) => {
+      parts.push(small(455, 46 + i * 14, k), small(530, 46 + i * 14, v, ' is-strong'));
+    });
+    parts.push(small(455, 96, 'Program'));
+    LAUNCH_PROGRAM.forEach((t, i) => {
+      const hot = s.rows.includes(i);
+      const y = 101 + i * 14;
+      if (hot) parts.push(svg('rect', { class: 'ia-gpu-hot', x: 451, y, width: 173, height: 13, rx: 2 }));
+      parts.push(svg('text', { class: `ia-gpu-code${hot ? ' is-on' : ''}`, x: 457, y: y + 9.5 }, t));
+    });
+    parts.push(small(455, 199, 'Registers of thread 37'));
+    s.regs.forEach((v, i) => {
+      parts.push(svg('text', { class: 'ia-gpu-code', x: 457, y: 213 + i * 13 }, `r${i + 1}  ${v || '·'}`));
+    });
+    return parts;
+  }
+
+  const LEGENDS = {
+    chip: [['ia-gpu-blk is-wait', 'Waits in the grid'], ['ia-gpu-blk is-run', 'Runs on an SM'], ['ia-gpu-blk is-done', 'Finished']],
+    sm: [['is-math', 'Runs an instruction'], ['is-read', 'Starts a read'], ['is-wait', 'Waits for its data'], ['is-ready', 'Ready, waits for its turn'], ['is-done', 'Done']],
+  };
+
+  function go(i) {
+    at = Math.max(0, Math.min(LAUNCH_STEPS.length - 1, i));
+    const s = LAUNCH_STEPS[at];
+    const parts = s.view === 'chip' ? chip(s) : sm(s);
+    picture.replaceChildren(svg('svg', { viewBox: '0 0 640 270', role: 'img', 'aria-label': s.view === 'chip' ? 'The CPU, the stream, the work distributor and 4 SMs' : 'The warps of SM 0 and the registers of thread 37' }, parts));
+    legend.replaceChildren(...LEGENDS[s.view].map(([cls, text]) => el('span', { class: 'ia-gpu-legend__item' }, [el('i', { class: `ia-gpu-swatch ${cls}` }), text])));
+    stepOut.textContent = `Step ${at + 1} of ${LAUNCH_STEPS.length}`;
+    back.disabled = at === 0;
+    next.disabled = at === LAUNCH_STEPS.length - 1;
+    cap.textContent = s.caption;
+  }
+
+  go(0);
+}
+
+/* -----------------------------
  * Start
  * ----------------------------- */
 const BUILDERS = {
   '[data-gpu-machine]': buildMachine,
   '[data-gpu-intensity]': buildIntensity,
   '[data-gpu-threads]': buildThreads,
+  '[data-gpu-launch]': buildLaunch,
 };
 
 for (const [sel, build] of Object.entries(BUILDERS)) {

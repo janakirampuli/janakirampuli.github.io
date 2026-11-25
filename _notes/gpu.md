@@ -1,7 +1,7 @@
 ---
 layout: notes
 title: "GPUs from first principles"
-description: "How a GPU works, built up from a single multiply-add: memory bandwidth and latency, threads, warps, coalesced reads, SMs, blocks, occupancy and waves, clusters, shared memory and the levels of memory."
+description: "How a GPU works, built up from a single multiply-add: memory bandwidth and latency, threads, warps, coalesced reads, SMs, blocks, occupancy and waves, clusters, shared memory and the levels of memory, and what happens from a kernel launch on the CPU to a single thread."
 date: 2026-11-02
 tags: ["gpu", "cuda", "hardware"]
 project: gpu-programming
@@ -37,6 +37,7 @@ extra_css:
 - [TMA](#tma)
 - [Clusters](#clusters)
 - [Overview](#overview)
+- [What happens when the CPU starts a kernel](#what-happens-when-the-cpu-starts-a-kernel)
 - [Further reading](#further-reading)
 
 </div>
@@ -332,6 +333,51 @@ The work splits the other way, from the top down:
 - A block splits into warps of 32 threads, and each warp runs on one quarter of the SM.
 - Each thread keeps its own numbers in registers.
 
+## What happens when the CPU starts a kernel
+
+The parts from the earlier sections work in a fixed order when the CPU starts a kernel. The diagram follows one kernel from the CPU down to a single thread, on a small made up chip with 4 SMs that each hold 256 threads. The kernel runs `y = a·x + y` on lists of 1,280 places, as a grid of 10 blocks with 128 threads each. You can step through the launch.
+
+{% include components/gpu.html diagram="launch" %}
+
+### On the CPU
+
+The compiler turns the kernel into GPU instructions before the program runs, and it also works out how many registers each thread needs. The driver is a program from NVIDIA that runs on the CPU and controls the GPU. Only the part of the driver that runs inside the Linux kernel is [open source](https://github.com/NVIDIA/open-gpu-kernel-modules), and the part that CUDA programs call is closed. [tinygrad](https://docs.tinygrad.org/runtime/) has its own code that starts kernels on NVIDIA GPUs without the closed part, so you can read how a launch works there. Before the first launch of a kernel, the driver copies the kernel's instructions into GPU memory.
+
+To start the kernel, the CPU writes a launch command. The command names the kernel and gives the number of blocks, the number of threads in each block and the shared memory that each block needs. It also holds the input values of the kernel. For `y = a·x + y`, the input values are the number `a`, the length of the lists and the addresses of `x` and `y`.
+
+The CPU puts the command in a stream, which is a queue in memory that the GPU reads from, and the CPU then goes on with its own work. The commands in one stream run in order. For example, a copy of `y` back to the CPU that comes after the kernel in the same stream waits until the kernel has finished. Commands in different streams may run at the same time.
+
+### On the GPU
+
+The GPU reads the next command from the stream and passes the grid to the work distributor. The work distributor is the part of the GPU that holds the grids that are ready to run, and it hands out their blocks to the SMs.
+The work distributor sends a block to an SM only when the SM has room for the whole block. The SM needs enough free places for threads, enough free registers and enough free shared memory, and an SM of the H100 holds at most 32 blocks. If one block needs more than a whole SM has, the kernel fails to start. For a cluster, the GPU places all the blocks of the cluster at the same time, on SMs of one GPC. NVIDIA doesn't publish the order in which the blocks go to the SMs, so a kernel must give the right result in any order.{% include components/sidenote.html id="sn-deadlock" label="11" text="A block that waits for another block of the same grid can wait forever. When the grid is larger than one wave, the work distributor may not start the other block until a running block finishes and frees its space, and the waiting block never finishes. Clusters are the one exception, because the GPU starts all the blocks of a cluster at the same time, so the blocks of a cluster can wait for each other." %}
+
+### Inside an SM
+
+When a block arrives, the SM reserves registers for each of its threads and reserves the shared memory of the block. The space stays reserved until the whole block has finished. The SM then splits the block into warps. The first warp holds threads 0 to 31, and the second warp holds threads 32 to 63, and so on. Each warp goes to one quarter of the SM, and the diagram shows one possible placement. The input values of the kernel sit in a small memory called constant memory, which every thread can read.
+
+On each tick, the scheduler of each quarter picks a warp that is ready and runs its next instruction for all 32 threads. A warp is ready when the numbers that its next instruction needs have arrived. A warp isn't ready while it waits for a read from memory, or while it waits for the other warps of its block at a barrier, which is a point in the program where the threads of a block wait for each other. The switch from one warp to another costs nothing, because the registers of every warp stay on the chip, as the section on [switching between threads](#switching-between-threads) described.
+
+### Inside a thread
+
+A thread runs the same instructions as the processor at the start of the note, on its own place in the lists. Thread 37 of block 1 works on place 165, and it runs the instructions in three steps, together with the other 31 threads of its warp:
+
+1. The warp loads `a`, and it starts the reads of `x` and `y`. Each thread asks for its own place, and the 32 places sit next to each other, so the reads are coalesced. The warp then waits for the data, and the scheduler of its quarter runs other warps in the meantime.
+2. When the numbers arrive, the warp runs the multiplication and the addition. Each thread uses its own registers, so thread 37 computes `a·x + y` at place 165 while the other 31 threads do the same at their places.
+3. The warp writes the new `y` of every thread back to memory. The threads have reached the end of the program, so the warp is done.
+
+### When the work finishes
+
+A block is finished when all of its warps are done. The SM then frees the registers and the shared memory of the block, and the work distributor sends a waiting block into the free space. In the diagram, the 4 SMs run 8 blocks in the first wave. The last 2 blocks run in a second wave, and during the second wave SMs 2 and 3 have nothing to run.
+
+The kernel is finished when its last block is finished. The next command in the stream can then start, which in the diagram is the copy of `y` back to the CPU. The CPU learns that the kernel has finished only when it waits for a result, e.g., for the copy.
+
+### What the launch means for a kernel
+
+- The registers and the shared memory that a kernel uses decide how many of its blocks fit on an SM at the same time.
+- The blocks of a grid run in no fixed order, so a block must not wait for another block of the same grid.
+- The number of blocks compared with the number of SMs decides how many waves the grid takes.
+
 ## Further reading
 
 - [How GPU Computing Works](https://www.youtube.com/watch?v=3l10o0DYJXg) (Jones, 2021)
@@ -344,5 +390,6 @@ The work splits the other way, from the top down:
 - [AMD's Zen 4 Part 1: Frontend and Execution Engine](https://old.chipsandcheese.com/2022/11/05/amds-zen-4-part-1-frontend-and-execution-engine/) (Chips and Cheese, 2022)
 - [AMD's Zen 4, Part 2: Memory Subsystem and Conclusion](https://chipsandcheese.com/p/amds-zen-4-part-2-memory-subsystem-and-conclusion) (Chips and Cheese, 2022)
 - [Testing AMD's Bergamo: Zen 4c Spam](https://chipsandcheese.com/p/testing-amds-bergamo-zen-4c-spam) (Chips and Cheese, 2023)
+- [CUDA C++ Programming Guide 12.4](https://docs.nvidia.com/cuda/archive/12.4.0/cuda-c-programming-guide/index.html), the chapters on the programming model and the hardware implementation
 - [NVIDIA H100 datasheet](https://resources.nvidia.com/en-us-hopper-architecture/nvidia-tensor-core-gpu-datasheet)
 - [Dissecting the NVIDIA Hopper Architecture through Microbenchmarking and Multiple Level Analysis](https://arxiv.org/abs/2501.12084) (Luo and others, 2025)
